@@ -168,49 +168,126 @@ export default function Home() {
               <div className="space-y-6">
                 <h2 className="text-2xl font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-2">Team Details</h2>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {scoreboard?.leaderboard.map(entry => (
-                    <Card key={entry.poolMemberId} id={`team-${entry.poolMemberId}`} className="bg-card border-card-border overflow-hidden rounded-xl shadow-lg">
-                      <div className="bg-black/40 p-4 border-b border-border flex items-center justify-between">
-                        <h3 className="font-bold text-xl">{entry.name}'s Team</h3>
-                        <span className={`text-2xl font-mono font-bold ${entry.toPar !== null && entry.toPar < 0 ? 'text-primary' : entry.toPar && entry.toPar > 0 ? 'text-muted-foreground' : ''}`}>
-                          {formatScore(entry.toPar)}
-                        </span>
-                      </div>
-                      <div className="p-0">
-                        {entry.rounds.length > 0 ? (
-                          <Table>
-                            <TableHeader className="bg-transparent border-b border-border/50">
-                              <TableRow className="border-none hover:bg-transparent">
-                                <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Golfer</TableHead>
-                                <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">Score</TableHead>
-                                <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">Thru</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {entry.rounds[entry.rounds.length - 1].golferDetails.map((golfer) => (
-                                <TableRow key={golfer.golferId} className={`border-border/20 hover:bg-white/5 ${golfer.counted === false ? 'opacity-40' : ''}`}>
-                                  <TableCell className="font-semibold flex items-center gap-2">
-                                    {golfer.golferName}
-                                    {golfer.isCut && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">CUT</Badge>}
-                                    {golfer.isWd && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">WD</Badge>}
-                                    {golfer.isDq && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">DQ</Badge>}
-                                  </TableCell>
-                                  <TableCell className={`text-right font-mono ${golfer.scoreToPar !== null && golfer.scoreToPar < 0 ? 'text-primary' : ''} ${golfer.counted === false ? 'line-through' : ''} ${golfer.isPenalty ? 'italic text-destructive' : ''}`}>
-                                    {formatScore(golfer.scoreToPar)}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono text-muted-foreground text-sm">
-                                    {golfer.holesCompleted > 0 ? (golfer.holesCompleted === 18 ? 'F' : golfer.holesCompleted) : '-'}
-                                  </TableCell>
+                  {scoreboard?.leaderboard.map(entry => {
+                    const currentRound = scoreboard.tournament.currentRound || 1;
+
+                    // Aggregate per-golfer data across all rounds
+                    const golferMap = new Map<string, {
+                      golferId: string;
+                      golferName: string;
+                      isCut: boolean; isWd: boolean; isDq: boolean;
+                      teeTime: string | null;
+                      roundScores: (number | null)[];
+                      roundCounted: (boolean | null)[];
+                      roundIsPenalty: boolean[];
+                      holesCompleted: number;
+                      totalToPar: number | null;
+                    }>();
+
+                    for (const round of entry.rounds) {
+                      for (const g of round.golferDetails) {
+                        if (!golferMap.has(g.golferId)) {
+                          golferMap.set(g.golferId, {
+                            golferId: g.golferId,
+                            golferName: g.golferName,
+                            isCut: false, isWd: false, isDq: false,
+                            teeTime: null,
+                            roundScores: [null, null, null, null],
+                            roundCounted: [null, null, null, null],
+                            roundIsPenalty: [false, false, false, false],
+                            holesCompleted: 0,
+                            totalToPar: null,
+                          });
+                        }
+                        const agg = golferMap.get(g.golferId)!;
+                        const idx = round.roundNumber - 1;
+                        agg.roundScores[idx] = g.scoreToPar;
+                        agg.roundCounted[idx] = g.counted ?? null;
+                        agg.roundIsPenalty[idx] = g.isPenalty;
+                        if (g.isCut) agg.isCut = true;
+                        if (g.isWd) agg.isWd = true;
+                        if (g.isDq) agg.isDq = true;
+                        if (round.roundNumber === currentRound) {
+                          agg.holesCompleted = g.holesCompleted;
+                          agg.teeTime = g.teeTime;
+                        }
+                      }
+                    }
+
+                    // Compute total to par for each golfer
+                    for (const agg of golferMap.values()) {
+                      const scored = agg.roundScores.filter(s => s !== null) as number[];
+                      agg.totalToPar = scored.length > 0 ? scored.reduce((a, b) => a + b, 0) : null;
+                    }
+
+                    // Sort: best total first, then nulls
+                    const golfers = Array.from(golferMap.values()).sort((a, b) => {
+                      if (a.totalToPar === null && b.totalToPar === null) return 0;
+                      if (a.totalToPar === null) return 1;
+                      if (b.totalToPar === null) return -1;
+                      return a.totalToPar - b.totalToPar;
+                    });
+
+                    // A golfer is "dropped" in a round if counted===false for that round
+                    const isDroppedInAnyCountedRound = (agg: typeof golfers[0]) =>
+                      agg.roundCounted.every(c => c === false || c === null) && agg.roundCounted.some(c => c === false);
+
+                    return (
+                      <Card key={entry.poolMemberId} id={`team-${entry.poolMemberId}`} className="bg-card border-card-border overflow-hidden rounded-xl shadow-lg">
+                        <div className="bg-black/40 p-4 border-b border-border flex items-center justify-between">
+                          <h3 className="font-bold text-xl">{entry.name}'s Team</h3>
+                          <span className={`text-2xl font-mono font-bold ${entry.toPar !== null && entry.toPar < 0 ? 'text-primary' : entry.toPar !== null && entry.toPar > 0 ? 'text-muted-foreground' : ''}`}>
+                            {formatScore(entry.toPar)}
+                          </span>
+                        </div>
+                        <div className="p-0 overflow-x-auto">
+                          {golfers.length > 0 ? (
+                            <Table>
+                              <TableHeader className="bg-transparent border-b border-border/50">
+                                <TableRow className="border-none hover:bg-transparent">
+                                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground min-w-[140px]">Golfer</TableHead>
+                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">Total</TableHead>
+                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">R1</TableHead>
+                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">R2</TableHead>
+                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">R3</TableHead>
+                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">R4</TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        ) : (
-                          <div className="p-8 text-center text-muted-foreground">No round data available yet.</div>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
+                              </TableHeader>
+                              <TableBody>
+                                {golfers.map((golfer) => {
+                                  const everCounted = golfer.roundCounted.some(c => c === true);
+                                  const neverCounted = golfer.roundCounted.every(c => c === false || c === null) && golfer.roundCounted.some(c => c === false);
+                                  const dim = neverCounted && !golfer.isCut && !golfer.isWd && !golfer.isDq;
+                                  return (
+                                    <TableRow key={golfer.golferId} className={`border-border/20 hover:bg-white/5 ${dim ? 'opacity-40' : ''}`}>
+                                      <TableCell className="font-semibold">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className={dim ? 'line-through' : ''}>{golfer.golferName}</span>
+                                          {golfer.isCut && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">CUT</Badge>}
+                                          {golfer.isWd && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">WD</Badge>}
+                                          {golfer.isDq && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">DQ</Badge>}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className={`text-right font-mono font-bold ${golfer.totalToPar !== null && golfer.totalToPar < 0 ? 'text-primary' : ''}`}>
+                                        {formatScore(golfer.totalToPar)}
+                                      </TableCell>
+                                      {golfer.roundScores.map((score, i) => (
+                                        <TableCell key={i} className={`text-right font-mono text-sm ${score !== null && score < 0 ? 'text-primary' : ''} ${golfer.roundCounted[i] === false ? 'opacity-50 line-through' : ''} ${golfer.roundIsPenalty[i] ? 'italic text-destructive' : ''}`}>
+                                          {formatScore(score)}
+                                        </TableCell>
+                                      ))}
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          ) : (
+                            <div className="p-8 text-center text-muted-foreground">No picks entered yet.</div>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  })}
                 </div>
               </div>
             )}
