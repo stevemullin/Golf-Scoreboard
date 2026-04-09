@@ -1,0 +1,373 @@
+import React, { useState } from "react";
+import { Link } from "wouter";
+import { 
+  useGetTournaments,
+  useCreateTournament,
+  useActivateTournament,
+  useGetPoolMembers,
+  useCreatePoolMember,
+  useForceRefresh,
+  useGetTournamentField,
+  useGetMemberPicks,
+  useSavePicks,
+  getGetTournamentFieldQueryKey
+} from "@workspace/api-client-react";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { useQueryClient } from "@tanstack/react-query";
+
+export default function Admin() {
+  const [password, setPassword] = useState(localStorage.getItem("admin_password") || "");
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem("admin_password"));
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: tournaments, refetch: refetchTournaments } = useGetTournaments();
+  const { data: poolMembers, refetch: refetchMembers } = useGetPoolMembers();
+
+  const createTournament = useCreateTournament();
+  const activateTournament = useActivateTournament();
+  const createMember = useCreatePoolMember();
+  const forceRefresh = useForceRefresh();
+  const savePicks = useSavePicks();
+
+  const [newTourney, setNewTourney] = useState({ name: "", year: new Date().getFullYear(), espnId: "" });
+  const [newMember, setNewMember] = useState("");
+  
+  const [pickTourneyId, setPickTourneyId] = useState("");
+  const [pickMemberId, setPickMemberId] = useState("");
+
+  const activeTournament = tournaments?.find(t => t.isActive);
+  const selectedTourneyEspnId = tournaments?.find(t => t.id === pickTourneyId)?.espnEventId;
+
+  const { data: field } = useGetTournamentField({ espnEventId: selectedTourneyEspnId || "" }, {
+    query: {
+      enabled: !!selectedTourneyEspnId,
+    }
+  });
+
+  const { data: existingPicks, refetch: refetchPicks } = useGetMemberPicks(pickTourneyId, pickMemberId, {
+    query: {
+      enabled: !!pickTourneyId && !!pickMemberId
+    }
+  });
+
+  const [selectedGolfers, setSelectedGolfers] = useState<string[]>([]);
+
+  // Update selected golfers when picks change
+  React.useEffect(() => {
+    if (existingPicks) {
+      setSelectedGolfers(existingPicks.map(p => p.id));
+    } else {
+      setSelectedGolfers([]);
+    }
+  }, [existingPicks]);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem("admin_password", password);
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("admin_password");
+    setIsAuthenticated(false);
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4">
+        <div className="max-w-md w-full bg-card p-8 rounded-xl border border-border shadow-2xl space-y-6">
+          <h1 className="text-2xl font-bold text-primary uppercase tracking-wider text-center">Admin Access</h1>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <Input 
+                type="password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                className="w-full bg-background border-input"
+              />
+            </div>
+            <Button type="submit" className="w-full uppercase tracking-wider font-bold">
+              Login
+            </Button>
+          </form>
+          <div className="text-center">
+            <Link href="/" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+              &larr; Back to Scoreboard
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const handleCreateTournament = () => {
+    createTournament.mutate({
+      data: {
+        name: newTourney.name,
+        year: newTourney.year,
+        espnEventId: newTourney.espnId,
+        password
+      }
+    }, {
+      onSuccess: () => {
+        toast({ title: "Tournament Created" });
+        refetchTournaments();
+        setNewTourney({ name: "", year: new Date().getFullYear(), espnId: "" });
+      },
+      onError: (e: any) => toast({ title: "Error", description: e.error || "Failed to create", variant: "destructive" })
+    });
+  };
+
+  const handleCreateMember = () => {
+    createMember.mutate({
+      data: {
+        name: newMember,
+        password
+      }
+    }, {
+      onSuccess: () => {
+        toast({ title: "Member Added" });
+        refetchMembers();
+        setNewMember("");
+      },
+      onError: (e: any) => toast({ title: "Error", description: e.error || "Failed to add member", variant: "destructive" })
+    });
+  };
+
+  const handleActivate = (id: string) => {
+    activateTournament.mutate({
+      tournamentId: id,
+      data: { password }
+    }, {
+      onSuccess: () => {
+        toast({ title: "Tournament Activated" });
+        refetchTournaments();
+      },
+      onError: (e: any) => toast({ title: "Error", description: e.error || "Failed to activate", variant: "destructive" })
+    });
+  };
+
+  const handleForceRefresh = () => {
+    if (!activeTournament) return;
+    forceRefresh.mutate({
+      data: { tournamentId: activeTournament.id, password }
+    }, {
+      onSuccess: () => toast({ title: "Refresh Triggered" }),
+      onError: (e: any) => toast({ title: "Error", description: e.error || "Failed to refresh", variant: "destructive" })
+    });
+  };
+
+  const handleSavePicks = () => {
+    if (!pickTourneyId || !pickMemberId) return;
+    savePicks.mutate({
+      data: {
+        tournamentId: pickTourneyId,
+        poolMemberId: pickMemberId,
+        golferIds: selectedGolfers,
+        password
+      }
+    }, {
+      onSuccess: () => {
+        toast({ title: "Picks Saved" });
+        refetchPicks();
+      },
+      onError: (e: any) => toast({ title: "Error", description: e.error || "Failed to save picks", variant: "destructive" })
+    });
+  };
+
+  const toggleGolfer = (golferId: string) => {
+    if (selectedGolfers.includes(golferId)) {
+      setSelectedGolfers(selectedGolfers.filter(id => id !== golferId));
+    } else {
+      if (selectedGolfers.length >= 6) {
+        toast({ title: "Limit Reached", description: "You can only select 6 golfers per team", variant: "destructive" });
+        return;
+      }
+      setSelectedGolfers([...selectedGolfers, golferId]);
+    }
+  };
+
+  return (
+    <div className="min-h-[100dvh] bg-background text-foreground p-4 md:p-8 pb-24 font-sans">
+      <div className="max-w-5xl mx-auto space-y-8">
+        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-border pb-6">
+          <h1 className="text-3xl font-bold text-primary uppercase tracking-widest">Tournament Admin</h1>
+          <div className="flex items-center gap-4">
+            <Button variant="outline" onClick={handleLogout} className="border-border">Logout</Button>
+            <Link href="/" className="text-muted-foreground hover:text-primary uppercase tracking-widest font-bold text-sm">
+              Scoreboard &rarr;
+            </Link>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <Card className="bg-card border-card-border shadow-lg">
+            <CardHeader className="bg-black/20 border-b border-border">
+              <CardTitle className="text-xl uppercase tracking-wider text-primary">Tournaments</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              <div className="space-y-4">
+                <h3 className="font-bold uppercase text-sm text-muted-foreground">Create New</h3>
+                <div className="grid gap-4">
+                  <div className="space-y-2">
+                    <Label>Tournament Name</Label>
+                    <Input value={newTourney.name} onChange={e => setNewTourney({...newTourney, name: e.target.value})} placeholder="e.g. The Masters" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Year</Label>
+                      <Input type="number" value={newTourney.year} onChange={e => setNewTourney({...newTourney, year: parseInt(e.target.value)})} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>ESPN Event ID</Label>
+                      <Input value={newTourney.espnId} onChange={e => setNewTourney({...newTourney, espnId: e.target.value})} placeholder="e.g. 401580342" />
+                    </div>
+                  </div>
+                  <Button onClick={handleCreateTournament} disabled={createTournament.isPending || !newTourney.name || !newTourney.espnId} className="uppercase font-bold tracking-wider">
+                    {createTournament.isPending ? "Creating..." : "Create Tournament"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-6 border-t border-border">
+                <h3 className="font-bold uppercase text-sm text-muted-foreground">Existing Tournaments</h3>
+                <div className="space-y-2">
+                  {tournaments?.map(t => (
+                    <div key={t.id} className="flex items-center justify-between p-3 bg-background rounded-md border border-border">
+                      <div>
+                        <div className="font-bold">{t.name} {t.year}</div>
+                        <div className="text-xs text-muted-foreground">ESPN ID: {t.espnEventId}</div>
+                      </div>
+                      {t.isActive ? (
+                        <Badge className="bg-primary text-primary-foreground hover:bg-primary uppercase tracking-wider">Active</Badge>
+                      ) : (
+                        <Button size="sm" variant="outline" onClick={() => handleActivate(t.id)} disabled={activateTournament.isPending} className="uppercase text-xs tracking-wider">
+                          Set Active
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  {tournaments?.length === 0 && (
+                    <div className="text-sm text-muted-foreground text-center py-4">No tournaments found</div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="pt-6 border-t border-border">
+                <Button 
+                  variant="outline" 
+                  className="w-full uppercase tracking-wider border-primary/50 text-primary hover:bg-primary/10" 
+                  onClick={handleForceRefresh}
+                  disabled={forceRefresh.isPending || !activeTournament}
+                >
+                  {forceRefresh.isPending ? "Refreshing..." : "Force ESPN Data Refresh"}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2 text-center">Refreshes active tournament data immediately</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-8">
+            <Card className="bg-card border-card-border shadow-lg">
+              <CardHeader className="bg-black/20 border-b border-border">
+                <CardTitle className="text-xl uppercase tracking-wider text-primary">Pool Members</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 space-y-6">
+                <div className="flex gap-2 items-end">
+                  <div className="space-y-2 flex-1">
+                    <Label>New Member Name</Label>
+                    <Input value={newMember} onChange={e => setNewMember(e.target.value)} placeholder="e.g. John Doe" />
+                  </div>
+                  <Button onClick={handleCreateMember} disabled={createMember.isPending || !newMember} className="uppercase font-bold tracking-wider">Add</Button>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-4">
+                  {poolMembers?.map(m => (
+                    <Badge key={m.id} variant="secondary" className="px-3 py-1 text-sm bg-background border border-border">{m.name}</Badge>
+                  ))}
+                  {poolMembers?.length === 0 && <span className="text-sm text-muted-foreground">No members added yet</span>}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card border-card-border shadow-lg">
+              <CardHeader className="bg-black/20 border-b border-border">
+                <CardTitle className="text-xl uppercase tracking-wider text-primary">Draft Picks</CardTitle>
+                <CardDescription>Select 6 golfers per team</CardDescription>
+              </CardHeader>
+              <CardContent className="p-6 space-y-6">
+                <div className="grid gap-4">
+                  <div className="space-y-2">
+                    <Label>Tournament</Label>
+                    <Select value={pickTourneyId} onValueChange={setPickTourneyId}>
+                      <SelectTrigger className="bg-background border-border">
+                        <SelectValue placeholder="Select tournament" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tournaments?.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.name} {t.year}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Pool Member</Label>
+                    <Select value={pickMemberId} onValueChange={setPickMemberId}>
+                      <SelectTrigger className="bg-background border-border">
+                        <SelectValue placeholder="Select member" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {poolMembers?.map(m => (
+                          <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {pickTourneyId && pickMemberId && (
+                  <div className="space-y-4 pt-4 border-t border-border">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold uppercase text-sm text-muted-foreground">Selected Golfers ({selectedGolfers.length}/6)</h3>
+                      <Button size="sm" onClick={handleSavePicks} disabled={savePicks.isPending} className="uppercase tracking-wider font-bold">
+                        {savePicks.isPending ? "Saving..." : "Save Picks"}
+                      </Button>
+                    </div>
+                    
+                    <div className="max-h-64 overflow-y-auto border border-border rounded-md bg-background p-2 grid grid-cols-1 gap-1">
+                      {field?.map(golfer => {
+                        const isSelected = selectedGolfers.includes(golfer.id);
+                        return (
+                          <div 
+                            key={golfer.id} 
+                            onClick={() => toggleGolfer(golfer.id)}
+                            className={`p-2 rounded cursor-pointer flex justify-between items-center transition-colors ${isSelected ? 'bg-primary/20 border border-primary/50' : 'hover:bg-white/5 border border-transparent'}`}
+                          >
+                            <span className={isSelected ? "font-bold text-primary" : ""}>{golfer.name}</span>
+                            {isSelected && <Badge className="bg-primary">Selected</Badge>}
+                          </div>
+                        );
+                      })}
+                      {(!field || field.length === 0) && (
+                        <div className="p-4 text-center text-muted-foreground text-sm">
+                          Field data not loaded. Make sure the ESPN ID is correct.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

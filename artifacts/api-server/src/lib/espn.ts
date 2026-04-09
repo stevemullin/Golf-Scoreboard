@@ -1,0 +1,172 @@
+import { logger } from "./logger";
+
+const ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard";
+
+export interface ESPNGolfer {
+  espnId: string;
+  name: string;
+}
+
+export interface ESPNRoundScore {
+  roundNumber: number;
+  scoreToPar: number | null;
+  holesCompleted: number;
+  isCut: boolean;
+  isWd: boolean;
+  isDq: boolean;
+  teeTime: string | null;
+}
+
+export interface ESPNGolferData {
+  espnId: string;
+  name: string;
+  scores: ESPNRoundScore[];
+  currentRound: number;
+}
+
+export interface ESPNEventStatus {
+  state: string; // "pre", "in", "post"
+  completed: boolean;
+  currentRound: number;
+}
+
+function parseScoreValue(displayValue: string): number | null {
+  if (!displayValue || displayValue === "-" || displayValue === "") return null;
+  if (displayValue === "E") return 0;
+  return parseInt(displayValue, 10);
+}
+
+export async function fetchESPNScoreboard(espnEventId?: string): Promise<{
+  golfers: ESPNGolferData[];
+  eventStatus: ESPNEventStatus;
+} | null> {
+  try {
+    const url = espnEventId
+      ? `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?event=${espnEventId}`
+      : ESPN_SCOREBOARD_URL;
+
+    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!response.ok) {
+      logger.warn({ status: response.status, url }, "ESPN API returned non-200");
+      return null;
+    }
+
+    const data = await response.json();
+
+    if (!data.events || data.events.length === 0) {
+      logger.warn("ESPN API returned no events");
+      return null;
+    }
+
+    // Find the matching event if espnEventId is provided
+    let event = data.events[0];
+    if (espnEventId) {
+      const found = data.events.find((e: { id: string }) => e.id === espnEventId);
+      if (found) event = found;
+    }
+
+    const competition = event.competitions?.[0];
+    if (!competition) return null;
+
+    // Determine current round from competitors' linescores
+    let maxRound = 0;
+    for (const comp of (competition.competitors || [])) {
+      for (const ls of (comp.linescores || [])) {
+        if (ls.period <= 4 && ls.linescores?.some((h: { displayValue: string }) => h.displayValue !== "-" && h.displayValue !== "")) {
+          if (ls.period > maxRound) maxRound = ls.period;
+        }
+      }
+    }
+
+    const eventStatus: ESPNEventStatus = {
+      state: event.status?.type?.state || "pre",
+      completed: event.status?.type?.completed || false,
+      currentRound: maxRound,
+    };
+
+    const golfers: ESPNGolferData[] = [];
+
+    for (const competitor of (competition.competitors || [])) {
+      const espnId = competitor.id;
+      const name = competitor.athlete?.displayName || competitor.athlete?.fullName || "Unknown";
+      const scores: ESPNRoundScore[] = [];
+
+      for (const linescore of (competitor.linescores || [])) {
+        const roundNumber = linescore.period;
+        if (roundNumber > 4) continue;
+
+        const displayValue = linescore.displayValue || "-";
+        const holes = linescore.linescores || [];
+        const holesCompleted = holes.filter(
+          (h: { displayValue: string }) => h.displayValue !== "-" && h.displayValue !== ""
+        ).length;
+
+        const scoreToPar = parseScoreValue(displayValue);
+
+        // Detect cut: displayValue is "-", holesCompleted is 0, and roundNumber > 2
+        const isCut = displayValue === "-" && holesCompleted === 0 && roundNumber > 2;
+
+        // Extract tee time
+        let teeTime: string | null = null;
+        const stats = linescore.statistics?.categories?.[0]?.stats;
+        if (stats && stats.length > 0) {
+          const lastStat = stats[stats.length - 1];
+          if (lastStat?.displayValue && lastStat.displayValue.includes(":")) {
+            teeTime = lastStat.displayValue;
+          }
+        }
+
+        scores.push({
+          roundNumber,
+          scoreToPar: isCut ? null : scoreToPar,
+          holesCompleted,
+          isCut,
+          isWd: false,
+          isDq: false,
+          teeTime,
+        });
+      }
+
+      golfers.push({ espnId, name, scores, currentRound: maxRound });
+    }
+
+    return { golfers, eventStatus };
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch ESPN scoreboard");
+    return null;
+  }
+}
+
+export async function fetchESPNField(espnEventId: string): Promise<ESPNGolfer[]> {
+  try {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?event=${espnEventId}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!response.ok) return [];
+
+    const data = await response.json();
+
+    // Find the matching event
+    let event = data.events?.[0];
+    if (espnEventId) {
+      const found = data.events?.find((e: { id: string }) => e.id === espnEventId);
+      if (found) event = found;
+    }
+
+    if (!event) return [];
+    const competition = event.competitions?.[0];
+    if (!competition) return [];
+
+    const golfers: ESPNGolfer[] = [];
+    for (const competitor of (competition.competitors || [])) {
+      golfers.push({
+        espnId: competitor.id,
+        name: competitor.athlete?.displayName || competitor.athlete?.fullName || "Unknown",
+      });
+    }
+
+    return golfers;
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch ESPN field");
+    return [];
+  }
+}

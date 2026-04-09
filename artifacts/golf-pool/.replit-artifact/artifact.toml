@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Golf Pool Scoreboard"
+version = "1.0.0"
+id = "artifacts/golf-pool"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23040
+
+[services.development]
+run = "pnpm --filter @workspace/golf-pool run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/golf-pool", "run", "build" ]
+publicDir = "artifacts/golf-pool/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23040"
+BASE_PATH = "/"

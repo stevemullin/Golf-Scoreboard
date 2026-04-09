@@ -3,13 +3,21 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Golf Pool Scoreboard API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: tournaments
+    description: Tournament operations
+  - name: scoreboard
+    description: Scoreboard operations
+  - name: admin
+    description: Admin operations
+  - name: pool
+    description: Pool member operations
 paths:
   /healthz:
     get:
@@ -24,6 +32,298 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /tournaments:
+    get:
+      operationId: getTournaments
+      tags: [tournaments]
+      summary: List all tournaments
+      description: Returns all tournaments sorted by year descending
+      responses:
+        "200":
+          description: List of tournaments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tournament"
+
+  /scoreboard:
+    get:
+      operationId: getScoreboard
+      tags: [scoreboard]
+      summary: Get live scoreboard
+      description: Returns the full live scoreboard for the active tournament. Triggers lazy ESPN refresh if cache is stale.
+      responses:
+        "200":
+          description: Scoreboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreboardResponse"
+        "404":
+          description: No active tournament
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /scoreboard/manual:
+    get:
+      operationId: getManualScoreboard
+      tags: [scoreboard]
+      summary: Get manual scoreboard
+      description: Returns manual mode scores for the active tournament
+      responses:
+        "200":
+          description: Manual scoreboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualScoreboardResponse"
+        "404":
+          description: No active tournament
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateManualScore
+      tags: [scoreboard]
+      summary: Update manual score for a pool member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateManualScoreBody"
+      responses:
+        "200":
+          description: Updated manual score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualScore"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /pool-members:
+    get:
+      operationId: getPoolMembers
+      tags: [pool]
+      summary: List all pool members
+      responses:
+        "200":
+          description: List of pool members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PoolMember"
+
+  /admin/tournament:
+    post:
+      operationId: createTournament
+      tags: [admin]
+      summary: Create a new tournament
+      description: Creates a tournament and fetches the field from ESPN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTournamentBody"
+      responses:
+        "201":
+          description: Tournament created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+        "401":
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/tournament/{tournamentId}/activate:
+    post:
+      operationId: activateTournament
+      tags: [admin]
+      summary: Set a tournament as active
+      parameters:
+        - name: tournamentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminPasswordBody"
+      responses:
+        "200":
+          description: Tournament activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+        "401":
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/pool-member:
+    post:
+      operationId: createPoolMember
+      tags: [admin]
+      summary: Create a new pool member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePoolMemberBody"
+      responses:
+        "201":
+          description: Pool member created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoolMember"
+        "401":
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/picks:
+    post:
+      operationId: savePicks
+      tags: [admin]
+      summary: Set a pool member's 6 picks for a tournament
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavePicksBody"
+      responses:
+        "200":
+          description: Picks saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavePicksResponse"
+        "401":
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/field:
+    get:
+      operationId: getTournamentField
+      tags: [admin]
+      summary: Fetch tournament field from ESPN
+      parameters:
+        - name: espnEventId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tournament field
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GolferFieldEntry"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/refresh:
+    post:
+      operationId: forceRefresh
+      tags: [admin]
+      summary: Force immediate ESPN data refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForceRefreshBody"
+      responses:
+        "200":
+          description: Refresh triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResponse"
+        "401":
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/picks/{tournamentId}/{poolMemberId}:
+    get:
+      operationId: getMemberPicks
+      tags: [admin]
+      summary: Get picks for a pool member in a tournament
+      parameters:
+        - name: tournamentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: poolMemberId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Member picks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GolferFieldEntry"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +334,323 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Tournament:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        year:
+          type: integer
+        espnEventId:
+          type: ["string", "null"]
+        status:
+          type: string
+        currentRound:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - year
+        - status
+        - currentRound
+        - isActive
+        - createdAt
+
+    PoolMember:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - createdAt
+
+    GolferRoundDetail:
+      type: object
+      properties:
+        golferId:
+          type: string
+        golferName:
+          type: string
+        scoreToPar:
+          type: ["integer", "null"]
+        holesCompleted:
+          type: integer
+        isCut:
+          type: boolean
+        isWd:
+          type: boolean
+        isDq:
+          type: boolean
+        isPenalty:
+          type: boolean
+        teeTime:
+          type: ["string", "null"]
+        counted:
+          type: ["boolean", "null"]
+      required:
+        - golferId
+        - golferName
+        - holesCompleted
+        - isCut
+        - isWd
+        - isDq
+        - isPenalty
+
+    RoundScore:
+      type: object
+      properties:
+        roundNumber:
+          type: integer
+        score:
+          type: ["integer", "null"]
+        golferDetails:
+          type: array
+          items:
+            $ref: "#/components/schemas/GolferRoundDetail"
+      required:
+        - roundNumber
+        - golferDetails
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        poolMemberId:
+          type: string
+        name:
+          type: string
+        toPar:
+          type: ["integer", "null"]
+        thru:
+          type: string
+        today:
+          type: ["integer", "null"]
+        r1:
+          type: ["integer", "null"]
+        r2:
+          type: ["integer", "null"]
+        r3:
+          type: ["integer", "null"]
+        r4:
+          type: ["integer", "null"]
+        rounds:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoundScore"
+      required:
+        - rank
+        - poolMemberId
+        - name
+        - thru
+        - rounds
+
+    ScoreboardResponse:
+      type: object
+      properties:
+        tournament:
+          $ref: "#/components/schemas/Tournament"
+        lastUpdated:
+          type: ["string", "null"]
+        nextUpdate:
+          type: ["string", "null"]
+        refreshIntervalMinutes:
+          type: integer
+        leaderboard:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+      required:
+        - tournament
+        - refreshIntervalMinutes
+        - leaderboard
+
+    ManualScore:
+      type: object
+      properties:
+        id:
+          type: string
+        tournamentId:
+          type: string
+        poolMemberId:
+          type: string
+        poolMemberName:
+          type: string
+        r1:
+          type: ["integer", "null"]
+        r2:
+          type: ["integer", "null"]
+        r3:
+          type: ["integer", "null"]
+        r4:
+          type: ["integer", "null"]
+        toPar:
+          type: ["integer", "null"]
+        updatedBy:
+          type: ["string", "null"]
+        updatedAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - tournamentId
+        - poolMemberId
+        - poolMemberName
+
+    ManualScoreboardResponse:
+      type: object
+      properties:
+        tournament:
+          $ref: "#/components/schemas/Tournament"
+        leaderboard:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManualScore"
+      required:
+        - tournament
+        - leaderboard
+
+    UpdateManualScoreBody:
+      type: object
+      properties:
+        tournamentId:
+          type: string
+        poolMemberId:
+          type: string
+        r1:
+          type: ["integer", "null"]
+        r2:
+          type: ["integer", "null"]
+        r3:
+          type: ["integer", "null"]
+        r4:
+          type: ["integer", "null"]
+        updatedBy:
+          type: ["string", "null"]
+      required:
+        - tournamentId
+        - poolMemberId
+
+    CreateTournamentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        year:
+          type: integer
+        espnEventId:
+          type: string
+        refreshIntervalMinutes:
+          type: integer
+        password:
+          type: string
+      required:
+        - name
+        - year
+        - espnEventId
+        - password
+
+    CreatePoolMemberBody:
+      type: object
+      properties:
+        name:
+          type: string
+        password:
+          type: string
+      required:
+        - name
+        - password
+
+    AdminPasswordBody:
+      type: object
+      properties:
+        password:
+          type: string
+      required:
+        - password
+
+    SavePicksBody:
+      type: object
+      properties:
+        tournamentId:
+          type: string
+        poolMemberId:
+          type: string
+        golferIds:
+          type: array
+          items:
+            type: string
+        password:
+          type: string
+      required:
+        - tournamentId
+        - poolMemberId
+        - golferIds
+        - password
+
+    SavePicksResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+        - message
+
+    GolferFieldEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        espnId:
+          type: ["string", "null"]
+        name:
+          type: string
+      required:
+        - id
+        - name
+
+    ForceRefreshBody:
+      type: object
+      properties:
+        tournamentId:
+          type: string
+        password:
+          type: string
+      required:
+        - tournamentId
+        - password
+
+    RefreshResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        lastUpdated:
+          type: ["string", "null"]
+      required:
+        - success
+        - message
