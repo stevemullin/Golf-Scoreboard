@@ -92,24 +92,28 @@ function calculateMemberRoundScore(
     });
   }
 
-  // Sort ascending (best first), nulls last
-  const sorted = golferScores
-    .filter(g => g.scoreToPar !== null)
-    .sort((a, b) => a.scoreToPar! - b.scoreToPar!);
+  // Sort ascending (best first).
+  // Golfers not yet started (scoreToPar === null, not cut/WD/DQ) are treated as 0 (even par)
+  // so they rank ahead of anyone who is over par. Penalty scores (cut/WD/DQ) are always
+  // non-null by this point (set to maxScoreForRound above), so ?? 0 only affects
+  // genuinely-not-started golfers.
+  const sorted = [...golferScores].sort((a, b) => {
+    const aEff = a.scoreToPar ?? 0;
+    const bEff = b.scoreToPar ?? 0;
+    return aEff - bEff;
+  });
 
   if (sorted.length < 4) {
-    const partialSum = sorted.reduce((sum, g) => sum + g.scoreToPar!, 0);
+    const partialSum = sorted.reduce((sum, g) => sum + (g.scoreToPar ?? 0), 0);
     return { score: sorted.length > 0 ? partialSum : null, golferScores };
   }
 
   const best4 = sorted.slice(0, 4);
-  const roundScore = best4.reduce((sum, g) => sum + g.scoreToPar!, 0);
+  const roundScore = best4.reduce((sum, g) => sum + (g.scoreToPar ?? 0), 0);
 
   const countedIds = new Set(best4.map(g => g.golferId));
   for (const g of golferScores) {
-    if (g.scoreToPar !== null) {
-      g.counted = countedIds.has(g.golferId);
-    }
+    g.counted = countedIds.has(g.golferId);
   }
 
   return { score: roundScore, golferScores };
