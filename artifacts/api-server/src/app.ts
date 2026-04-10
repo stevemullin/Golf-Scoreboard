@@ -40,7 +40,8 @@ if (fs.existsSync(frontendDist)) {
   logger.info({ frontendDist }, "Serving frontend static files");
   app.use(express.static(frontendDist));
   // SPA fallback: serve index.html for all non-API routes
-  app.get("/*", (_req, res) => {
+  // Express 5 uses path-to-regexp v8 which requires named wildcards
+  app.get("/{*splat}", (_req, res) => {
     res.sendFile(path.join(frontendDist, "index.html"));
   });
 }
