@@ -96,6 +96,14 @@ export default function Home() {
 
         {isLoading && !scoreboard ? (
           <div className="space-y-8 animate-pulse">
+            {/* Spinner */}
+            <div className="flex flex-col items-center gap-3 py-4">
+              <svg className="animate-spin" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{animationDuration: '1s'}}>
+                <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="3" className="text-white/10" />
+                <path d="M24 4 A20 20 0 0 1 44 24" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="text-primary" />
+              </svg>
+              <span className="text-xs uppercase tracking-widest text-muted-foreground font-mono">Fetching scores…</span>
+            </div>
             {/* Leaderboard skeleton */}
             <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xl shadow-black/50">
               {/* Header row */}
