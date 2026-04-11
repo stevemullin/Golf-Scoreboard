@@ -1,0 +1,52 @@
+# Bug Fix: Scoring Logic, CUT Labels, and Strikethroughs
+
+There are 3 bugs to fix. All are related to the scoring logic.
+
+## Bug 1: Team score calculation is wrong (CRITICAL)
+
+The current code calculates the best 4 of 6 golfer scores PER ROUND, sums each round's best-4 separately, then adds the round totals. This is WRONG.
+
+**Correct logic:** The team score is based on each golfer's TOURNAMENT TOTAL, not per-round scores.
+
+Steps:
+1. For each of the 6 golfers on a team, sum ALL their individual round scores to get their tournament total (to par)
+2. For cut/WD/DQ golfers, add the max-score penalty for each missed round to their total
+3. For golfers not yet teed off in the current round, treat that round as 0 (even par) in their total
+4. Rank the 6 golfers by their tournament total (lowest/best first)
+5. Take the best 4 golfer totals and sum them = team score
+6. The 2 worst golfers are dropped entirely (all their rounds, as a whole)
+
+**Example using Sumser's team after 2 rounds:**
+- Haotong Li: R1(-1) + R2(-3) = -4 total
+- Ludvig Aberg: R1(+2) + R2(-2) = E total
+- Scottie Scheffler: R1(-2) + R2(+2) = E total
+- Sungjae Im: R1(+4) + R2(-3) = +1 total
+- Akshay Bhatia: R1(+1) + R2(+5) = +6 total (DROPPED)
+- Robert MacIntyre: R1(+8) + R2(-1) = +7 total (DROPPED)
+
+Best 4 totals: -4 + 0 + 0 + 1 = **-3** (this is the correct team score)
+
+The R1 and R2 columns in the leaderboard should show the sum of the counted (best 4) golfers' scores for that round. These are display values only -- the team total is NOT calculated by summing R1+R2+R3+R4. The team total comes directly from summing the 4 best golfer tournament totals.
+
+## Bug 2: CUT labels showing incorrectly
+
+The CUT badge/label is showing on golfers who are NOT actually cut. Only show the CUT label if the golfer has genuinely missed the cut (i.e., they have fewer completed rounds than the current tournament round, specifically: they have a placeholder "-" with 0 holes for Round 3+ after completing Rounds 1 and 2). The Masters is currently in Round 2, so NO golfer should show a CUT label yet -- cuts happen after Round 2 is complete.
+
+Check the `is_cut` flag logic in the ESPN data sync. A golfer should only be marked as cut if:
+- The round's `displayValue` is "-" AND `holesCompleted` is 0 AND `roundNumber > 2`
+
+Make sure the ESPN sync is not incorrectly setting `is_cut = true` for golfers who simply haven't started a round yet.
+
+## Bug 3: Remove per-round strikethroughs
+
+The current UI shows strikethrough styling on individual round scores for the 2 "dropped" golfers each round. This is wrong because:
+- Golfers are dropped based on their TOURNAMENT TOTAL, not per-round
+- A golfer is either fully counted or fully dropped (all their rounds together)
+- Individual round scores should NEVER have strikethrough styling
+
+Instead, the 2 dropped golfers (worst tournament totals) should have their ENTIRE ROW dimmed/reduced opacity in the team card. No strikethroughs on any individual score cells.
+
+Update the TeamCard component:
+- Remove all `strikethrough` props from ScoreCell components
+- Instead, apply reduced opacity (e.g., `opacity-40`) to the entire `<tr>` row for golfers where `counted === false`
+- The `counted` flag should be set at the golfer level (based on tournament total ranking), not at the per-round level

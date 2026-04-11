@@ -256,14 +256,13 @@ export default function Home() {
                               </TableHeader>
                               <TableBody>
                                 {golfers.map((golfer) => {
-                                  const everCounted = golfer.roundCounted.some(c => c === true);
-                                  const neverCounted = golfer.roundCounted.every(c => c === false || c === null) && golfer.roundCounted.some(c => c === false);
-                                  const dim = neverCounted && !golfer.isCut && !golfer.isWd && !golfer.isDq;
+                                  // Dropped = any round has counted===false (consistent across all rounds after backend fix)
+                                  const isDropped = golfer.roundCounted.some(c => c === false);
                                   return (
-                                    <TableRow key={golfer.golferId} className={`border-border/20 hover:bg-white/5 ${dim ? 'opacity-40' : ''}`}>
+                                    <TableRow key={golfer.golferId} className={`border-border/20 hover:bg-white/5 ${isDropped ? 'opacity-40' : ''}`}>
                                       <TableCell className="font-semibold">
                                         <div className="flex items-center gap-1.5 flex-wrap">
-                                          <span className={dim ? 'line-through' : ''}>{golfer.golferName}</span>
+                                          <span>{golfer.golferName}</span>
                                           {golfer.isCut && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">CUT</Badge>}
                                           {golfer.isWd && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">WD</Badge>}
                                           {golfer.isDq && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">DQ</Badge>}
@@ -276,7 +275,7 @@ export default function Home() {
                                         {golfer.isCut || golfer.isWd || golfer.isDq ? '-' : golfer.holesCompleted === 18 ? 'F' : golfer.holesCompleted > 0 ? golfer.holesCompleted : '-'}
                                       </TableCell>
                                       {golfer.roundScores.map((score, i) => (
-                                        <TableCell key={i} className={`text-right font-mono text-sm ${score !== null && score < 0 ? 'text-primary' : ''} ${golfer.roundCounted[i] === false ? 'opacity-50 line-through' : ''} ${golfer.roundIsPenalty[i] ? 'italic text-destructive' : ''}`}>
+                                        <TableCell key={i} className={`text-right font-mono text-sm ${score !== null && score < 0 ? 'text-primary' : ''} ${golfer.roundIsPenalty[i] ? 'italic text-destructive' : ''}`}>
                                           {formatScore(score)}
                                         </TableCell>
                                       ))}

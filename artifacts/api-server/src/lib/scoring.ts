@@ -22,7 +22,7 @@ export interface GolferRoundDetail {
   isDq: boolean;
   isPenalty: boolean;
   teeTime: string | null;
-  counted: boolean | null;
+  counted: boolean;
 }
 
 export interface RoundScore {
@@ -57,68 +57,6 @@ function getMaxScoreForRound(
   return Math.max(...scores);
 }
 
-function calculateMemberRoundScore(
-  picks: Array<{ golferId: string; golferName: string }>,
-  allScores: Array<{ golferId: string; roundNumber: number; scoreToPar: number | null; holesCompleted: number; isCut: boolean; isWd: boolean; isDq: boolean; teeTime: string | null }>,
-  roundNumber: number,
-  maxScoreForRound: number | null
-): { score: number | null; golferScores: GolferRoundDetail[] } {
-  const golferScores: GolferRoundDetail[] = [];
-
-  for (const pick of picks) {
-    const gs = allScores.find(s => s.golferId === pick.golferId && s.roundNumber === roundNumber);
-
-    let effectiveScore: number | null = null;
-    let isPenalty = false;
-
-    if (gs && gs.scoreToPar !== null) {
-      effectiveScore = gs.scoreToPar;
-    } else if (gs && (gs.isCut || gs.isWd || gs.isDq) && maxScoreForRound !== null) {
-      effectiveScore = maxScoreForRound;
-      isPenalty = true;
-    }
-
-    golferScores.push({
-      golferId: pick.golferId,
-      golferName: pick.golferName,
-      scoreToPar: effectiveScore,
-      holesCompleted: gs?.holesCompleted || 0,
-      isCut: gs?.isCut || false,
-      isWd: gs?.isWd || false,
-      isDq: gs?.isDq || false,
-      isPenalty,
-      teeTime: gs?.teeTime || null,
-      counted: null,
-    });
-  }
-
-  // Sort ascending (best first).
-  // Golfers not yet started (scoreToPar === null, not cut/WD/DQ) are treated as 0 (even par)
-  // so they rank ahead of anyone who is over par. Penalty scores (cut/WD/DQ) are always
-  // non-null by this point (set to maxScoreForRound above), so ?? 0 only affects
-  // genuinely-not-started golfers.
-  const sorted = [...golferScores].sort((a, b) => {
-    const aEff = a.scoreToPar ?? 0;
-    const bEff = b.scoreToPar ?? 0;
-    return aEff - bEff;
-  });
-
-  if (sorted.length < 4) {
-    const partialSum = sorted.reduce((sum, g) => sum + (g.scoreToPar ?? 0), 0);
-    return { score: sorted.length > 0 ? partialSum : null, golferScores };
-  }
-
-  const best4 = sorted.slice(0, 4);
-  const roundScore = best4.reduce((sum, g) => sum + (g.scoreToPar ?? 0), 0);
-
-  const countedIds = new Set(best4.map(g => g.golferId));
-  for (const g of golferScores) {
-    g.counted = countedIds.has(g.golferId);
-  }
-
-  return { score: roundScore, golferScores };
-}
-
 function calculateMemberThru(
   rounds: RoundScore[],
   currentRound: number
@@ -128,12 +66,14 @@ function calculateMemberThru(
   const currentRoundData = rounds.find(r => r.roundNumber === currentRound);
   if (!currentRoundData) return "-";
 
-  const golfers = currentRoundData.golferDetails;
+  // Only look at counted golfers for thru calculation
+  const counted = currentRoundData.golferDetails.filter(g => g.counted);
+  if (counted.length === 0) return "-";
 
-  const finished = golfers.filter(g => g.holesCompleted === 18 && !g.isCut);
-  const inProgress = golfers.filter(g => g.holesCompleted > 0 && g.holesCompleted < 18 && !g.isCut);
+  const finished = counted.filter(g => g.holesCompleted === 18 || g.isCut || g.isWd || g.isDq);
+  const inProgress = counted.filter(g => g.holesCompleted > 0 && g.holesCompleted < 18 && !g.isCut && !g.isWd && !g.isDq);
 
-  if (finished.length + golfers.filter(g => g.isCut).length === golfers.length) return "F";
+  if (finished.length === counted.length) return "F";
   if (inProgress.length === 0 && finished.length === 0) return "-";
   if (inProgress.length > 0) {
     const minHoles = Math.min(...inProgress.map(g => g.holesCompleted));
@@ -154,9 +94,7 @@ export async function refreshFromESPN(tournamentId: string): Promise<void> {
 
   const { golfers, eventStatus } = espnData;
 
-  // Upsert golfers and their scores
   for (const golferData of golfers) {
-    // Upsert golfer
     const existing = await db.select().from(golfersTable).where(eq(golfersTable.espnId, golferData.espnId)).then(r => r[0]);
 
     let golferId: string;
@@ -168,7 +106,6 @@ export async function refreshFromESPN(tournamentId: string): Promise<void> {
       golferId = inserted[0].id;
     }
 
-    // Upsert round scores
     for (const rs of golferData.scores) {
       const existingScore = await db.select().from(golferScoresTable)
         .where(and(
@@ -197,7 +134,6 @@ export async function refreshFromESPN(tournamentId: string): Promise<void> {
     }
   }
 
-  // Update tournament round and status
   let newStatus = tournament.status;
   if (eventStatus.state === "in") newStatus = "active";
   else if (eventStatus.state === "post" || eventStatus.completed) newStatus = "completed";
@@ -207,14 +143,12 @@ export async function refreshFromESPN(tournamentId: string): Promise<void> {
     status: newStatus,
   }).where(eq(tournamentsTable.id, tournamentId));
 
-  // Update api_cache
   await db.update(apiCacheTable).set({ lastFetchedAt: new Date() }).where(eq(apiCacheTable.tournamentId, tournamentId));
 
   logger.info({ tournamentId, golferCount: golfers.length }, "ESPN refresh complete");
 }
 
 export async function getOrRefreshScoreboard(tournamentId: string): Promise<LeaderboardEntry[]> {
-  // Check cache
   const cache = await db.select().from(apiCacheTable).where(eq(apiCacheTable.tournamentId, tournamentId)).then(r => r[0]);
 
   if (cache) {
@@ -239,9 +173,9 @@ export async function calculateScoreboard(tournamentId: string): Promise<Leaderb
   const tournament = await db.select().from(tournamentsTable).where(eq(tournamentsTable.id, tournamentId)).then(r => r[0]);
   if (!tournament) return [];
 
+  const currentRound = tournament.currentRound || 1;
   const members = await db.select().from(poolMembersTable).orderBy(poolMembersTable.name);
 
-  // Get all scores for this tournament
   const allScores = await db.select({
     golferId: golferScoresTable.golferId,
     roundNumber: golferScoresTable.roundNumber,
@@ -253,7 +187,7 @@ export async function calculateScoreboard(tournamentId: string): Promise<Leaderb
     teeTime: golferScoresTable.teeTime,
   }).from(golferScoresTable).where(eq(golferScoresTable.tournamentId, tournamentId));
 
-  // Get max score per round for cut penalties
+  // Max score per round for cut/WD/DQ penalties
   const maxScores: Record<number, number | null> = {};
   for (let r = 1; r <= 4; r++) {
     maxScores[r] = getMaxScoreForRound(allScores, r);
@@ -262,7 +196,6 @@ export async function calculateScoreboard(tournamentId: string): Promise<Leaderb
   const entries: LeaderboardEntry[] = [];
 
   for (const member of members) {
-    // Get this member's picks
     const picks = await db.select({
       golferId: teamPicksTable.golferId,
       golferName: golfersTable.name,
@@ -274,41 +207,164 @@ export async function calculateScoreboard(tournamentId: string): Promise<Leaderb
         eq(teamPicksTable.poolMemberId, member.id)
       ));
 
-    const rounds: RoundScore[] = [];
-    let totalToPar: number | null = null;
-    let todayScore: number | null = null;
-
-    for (let r = 1; r <= 4; r++) {
-      const result = calculateMemberRoundScore(picks, allScores, r, maxScores[r]);
-      rounds.push({
-        roundNumber: r,
-        score: result.score,
-        golferDetails: result.golferScores,
+    if (picks.length === 0) {
+      entries.push({
+        rank: 0,
+        poolMemberId: member.id,
+        name: member.name,
+        toPar: null,
+        thru: "-",
+        today: null,
+        r1: null, r2: null, r3: null, r4: null,
+        rounds: [],
       });
-
-      if (result.score !== null) {
-        totalToPar = (totalToPar || 0) + result.score;
-      }
-
-      if (r === tournament.currentRound) {
-        todayScore = result.score;
-      }
+      continue;
     }
 
-    const thru = calculateMemberThru(rounds, tournament.currentRound);
-    const roundScores = rounds.map(r => r.score);
+    // ── Step 1: compute per-golfer per-round scores and tournament total ──────
+    interface GolferWithTotal {
+      golferId: string;
+      golferName: string;
+      isCut: boolean;
+      isWd: boolean;
+      isDq: boolean;
+      // Per-round data (always 4 entries)
+      roundData: Array<{
+        roundNumber: number;
+        scoreToPar: number | null;  // displayed score (null = not started)
+        effectiveScore: number;     // used in tournament total (0 for not-started)
+        isPenalty: boolean;
+        holesCompleted: number;
+        teeTime: string | null;
+      }>;
+      tournamentTotal: number;
+      counted: boolean;
+    }
+
+    const golferList: GolferWithTotal[] = picks.map(pick => {
+      // A golfer is genuinely cut/WD/DQ if any of their round rows say so
+      const picksScores = allScores.filter(s => s.golferId === pick.golferId);
+      const isCut = picksScores.some(s => s.isCut);
+      const isWd  = picksScores.some(s => s.isWd);
+      const isDq  = picksScores.some(s => s.isDq);
+
+      let tournamentTotal = 0;
+      const roundData = [];
+
+      for (let r = 1; r <= 4; r++) {
+        const gs = allScores.find(s => s.golferId === pick.golferId && s.roundNumber === r);
+
+        let scoreToPar: number | null = null;
+        let effectiveScore = 0;
+        let isPenalty = false;
+
+        if (gs) {
+          if (gs.scoreToPar !== null) {
+            // Has an actual (or partial) score
+            scoreToPar = gs.scoreToPar;
+            effectiveScore = gs.scoreToPar;
+          } else if (gs.isCut || gs.isWd || gs.isDq) {
+            // Missed cut / WD / DQ — apply penalty score for this round
+            const penalty = maxScores[r] ?? 0;
+            scoreToPar = penalty;
+            effectiveScore = penalty;
+            isPenalty = true;
+          } else {
+            // Row exists but no score yet (not teed off in this round).
+            // Display as "-", count as 0 (even par) toward tournament total.
+            scoreToPar = null;
+            effectiveScore = 0;
+          }
+
+          // Only include rounds up through the current round in the total
+          if (r <= currentRound) {
+            tournamentTotal += effectiveScore;
+          }
+        }
+        // No row at all = future round not yet in the ESPN data — skip it.
+
+        roundData.push({
+          roundNumber: r,
+          scoreToPar,
+          effectiveScore,
+          isPenalty,
+          holesCompleted: gs?.holesCompleted ?? 0,
+          teeTime: gs?.teeTime ?? null,
+        });
+      }
+
+      return {
+        golferId: pick.golferId,
+        golferName: pick.golferName,
+        isCut,
+        isWd,
+        isDq,
+        roundData,
+        tournamentTotal,
+        counted: false,
+      };
+    });
+
+    // ── Step 2: rank by tournament total, mark best 4 as counted ─────────────
+    const sorted = [...golferList].sort((a, b) => a.tournamentTotal - b.tournamentTotal);
+    const best4 = sorted.slice(0, Math.min(4, sorted.length));
+    const countedIds = new Set(best4.map(g => g.golferId));
+    for (const g of golferList) {
+      g.counted = countedIds.has(g.golferId);
+    }
+
+    // ── Step 3: team score = sum of best-4 tournament totals ─────────────────
+    const teamScore = best4.length > 0
+      ? best4.reduce((sum, g) => sum + g.tournamentTotal, 0)
+      : null;
+
+    // ── Step 4: build round display data ─────────────────────────────────────
+    // For each round, golferDetails carries the actual round score + counted flag.
+    // The round-level score (r1/r2/…) = sum of counted golfers' round scores
+    // (display only — the team total does NOT come from summing r1+r2+r3+r4).
+    const rounds: RoundScore[] = [];
+
+    for (let r = 1; r <= 4; r++) {
+      const golferDetails: GolferRoundDetail[] = golferList.map(g => {
+        const rd = g.roundData[r - 1];
+        return {
+          golferId: g.golferId,
+          golferName: g.golferName,
+          scoreToPar: rd.scoreToPar,
+          holesCompleted: rd.holesCompleted,
+          isCut: g.isCut,
+          isWd: g.isWd,
+          isDq: g.isDq,
+          isPenalty: rd.isPenalty,
+          teeTime: rd.teeTime,
+          counted: g.counted,
+        };
+      });
+
+      // Round display score: sum of counted golfers' actual round scores
+      const countedGolfers = golferDetails.filter(gd => gd.counted);
+      const anyCountedHasData = countedGolfers.some(gd => gd.scoreToPar !== null || gd.isPenalty);
+      const roundScore = anyCountedHasData
+        ? countedGolfers.reduce((sum, gd) => sum + (gd.scoreToPar ?? 0), 0)
+        : null;
+
+      rounds.push({ roundNumber: r, score: roundScore, golferDetails });
+    }
+
+    const todayScore = rounds.find(r => r.roundNumber === currentRound)?.score ?? null;
+    const thru = calculateMemberThru(rounds, currentRound);
 
     entries.push({
       rank: 0,
       poolMemberId: member.id,
       name: member.name,
-      toPar: totalToPar,
+      toPar: teamScore,
       thru,
       today: todayScore,
-      r1: roundScores[0] ?? null,
-      r2: roundScores[1] ?? null,
-      r3: roundScores[2] ?? null,
-      r4: roundScores[3] ?? null,
+      r1: rounds[0]?.score ?? null,
+      r2: rounds[1]?.score ?? null,
+      r3: rounds[2]?.score ?? null,
+      r4: rounds[3]?.score ?? null,
       rounds,
     });
   }
@@ -321,7 +377,7 @@ export async function calculateScoreboard(tournamentId: string): Promise<Leaderb
     return a.toPar - b.toPar;
   });
 
-  // Assign ranks (handle ties)
+  // Assign ranks with tie handling
   let rank = 1;
   for (let i = 0; i < entries.length; i++) {
     if (i > 0 && entries[i].toPar !== entries[i - 1].toPar) {

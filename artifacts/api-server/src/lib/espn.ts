@@ -127,6 +127,20 @@ export async function fetchESPNScoreboard(espnEventId?: string): Promise<{
         });
       }
 
+      // A golfer is only genuinely cut if round 2 is fully complete (18 holes).
+      // Before that, future-round rows show "-" / 0 holes but that just means
+      // the round hasn't happened yet — not that the golfer missed the cut.
+      const r2Entry = scores.find(s => s.roundNumber === 2);
+      const r2Complete = r2Entry ? r2Entry.holesCompleted === 18 : false;
+      if (!r2Complete) {
+        for (const score of scores) {
+          if (score.isCut) {
+            score.isCut = false;
+            // scoreToPar is already null for these entries
+          }
+        }
+      }
+
       golfers.push({ espnId, name, scores, currentRound: maxRound });
     }
 
