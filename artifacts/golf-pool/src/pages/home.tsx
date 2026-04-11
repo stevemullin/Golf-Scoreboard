@@ -95,9 +95,59 @@ export default function Home() {
         </header>
 
         {isLoading && !scoreboard ? (
-          <div className="animate-pulse space-y-8">
-            <div className="h-96 bg-card/50 rounded-xl border border-border"></div>
-            <div className="h-64 bg-card/50 rounded-xl border border-border"></div>
+          <div className="space-y-8 animate-pulse">
+            {/* Leaderboard skeleton */}
+            <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xl shadow-black/50">
+              {/* Header row */}
+              <div className="bg-black/40 px-4 py-3 flex gap-4 border-b border-border">
+                <div className="h-3 w-8 bg-white/10 rounded" />
+                <div className="h-3 flex-1 bg-white/10 rounded" />
+                <div className="h-3 w-12 bg-white/10 rounded" />
+                <div className="h-3 w-12 bg-white/10 rounded hidden sm:block" />
+                <div className="h-3 w-12 bg-white/10 rounded hidden sm:block" />
+                <div className="h-3 w-8 bg-white/10 rounded" />
+                <div className="h-3 w-8 bg-white/10 rounded" />
+              </div>
+              {/* Skeleton rows */}
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="px-4 py-4 flex items-center gap-4 border-b border-border/40 last:border-0">
+                  <div className="h-5 w-6 bg-white/10 rounded" />
+                  <div className={`h-5 bg-white/10 rounded ${i === 0 ? 'w-24' : i === 1 ? 'w-20' : i === 2 ? 'w-28' : 'w-16'}`} />
+                  <div className="flex-1" />
+                  <div className="h-5 w-10 bg-primary/20 rounded" />
+                  <div className="h-4 w-8 bg-white/10 rounded hidden sm:block" />
+                  <div className="h-4 w-8 bg-white/10 rounded hidden sm:block" />
+                  <div className="h-4 w-8 bg-white/10 rounded" />
+                  <div className="h-4 w-8 bg-white/10 rounded" />
+                </div>
+              ))}
+            </div>
+            {/* Team cards skeleton */}
+            <div>
+              <div className="h-4 w-36 bg-white/10 rounded mb-6" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-card border border-border rounded-xl overflow-hidden shadow-lg">
+                    <div className="bg-black/40 px-4 py-4 flex justify-between items-center border-b border-border">
+                      <div className="h-5 w-32 bg-white/10 rounded" />
+                      <div className="h-6 w-10 bg-primary/20 rounded" />
+                    </div>
+                    <div className="p-4 space-y-3">
+                      {[...Array(6)].map((_, j) => (
+                        <div key={j} className="flex gap-3 items-center">
+                          <div className={`h-4 bg-white/10 rounded ${j % 3 === 0 ? 'w-32' : j % 3 === 1 ? 'w-28' : 'w-24'}`} />
+                          <div className="flex-1" />
+                          <div className="h-4 w-8 bg-white/10 rounded" />
+                          <div className="h-4 w-8 bg-white/10 rounded" />
+                          <div className="h-4 w-8 bg-white/10 rounded" />
+                          <div className="h-4 w-8 bg-white/10 rounded" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
           <main className="space-y-12">
