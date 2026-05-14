@@ -94,7 +94,13 @@ export default function Home() {
           </div>
         </header>
 
-        {isLoading && !scoreboard ? (
+        {!isLoading && !scoreboard ? (
+          <div className="flex flex-col items-center gap-4 py-24 text-center">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+            <p className="text-xl font-bold uppercase tracking-wider text-muted-foreground">No Active Tournament</p>
+            <p className="text-sm text-muted-foreground">Set up a tournament in the <Link href="/admin" className="text-primary hover:underline">Admin</Link> panel to get started.</p>
+          </div>
+        ) : isLoading && !scoreboard ? (
           <div className="space-y-8 animate-pulse">
             {/* Spinner */}
             <div className="flex flex-col items-center gap-3 py-4">
@@ -176,7 +182,7 @@ export default function Home() {
                 </TableHeader>
                 <TableBody>
                   {mode === "live" ? (
-                    scoreboard?.leaderboard.map((entry) => (
+                    scoreboard?.leaderboard?.map((entry) => (
                       <TableRow 
                         key={entry.poolMemberId} 
                         className="border-border hover:bg-white/5 cursor-pointer transition-colors"
@@ -196,7 +202,7 @@ export default function Home() {
                       </TableRow>
                     ))
                   ) : (
-                    manualScoreboard?.leaderboard.map((entry, idx) => (
+                    manualScoreboard?.leaderboard?.map((entry, idx) => (
                       <ManualTableRow 
                         key={entry.poolMemberId} 
                         entry={entry} 
@@ -226,7 +232,7 @@ export default function Home() {
               <div className="space-y-6">
                 <h2 className="text-2xl font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-2">Team Details</h2>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {scoreboard?.leaderboard.map(entry => {
+                  {scoreboard?.leaderboard?.map(entry => {
                     const currentRound = scoreboard.tournament.currentRound || 1;
 
                     // Aggregate per-golfer data across all rounds
