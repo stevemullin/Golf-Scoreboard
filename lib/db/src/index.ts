@@ -16,13 +16,15 @@ if (!connectionString) {
   );
 }
 
-function isNeonSuspendedError(err: unknown): boolean {
+function isRetryableConnectionError(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
-  const msg = (err as Record<string, unknown>).message;
+  const msg = String((err as Record<string, unknown>).message ?? "");
   return (
-    typeof msg === "string" &&
-    (msg.includes("endpoint has been disabled") ||
-      msg.includes("Enable it using the API and retry"))
+    msg.includes("endpoint has been disabled") ||
+    msg.includes("Enable it using the API and retry") ||
+    msg.includes("timeout exceeded when trying to connect") ||
+    msg.includes("Connection terminated") ||
+    msg.includes("ECONNREFUSED")
   );
 }
 
@@ -33,8 +35,8 @@ class NeonRetryPool extends Pool {
       try {
         return await super.connect();
       } catch (err) {
-        if (isNeonSuspendedError(err) && attempt < maxAttempts - 1) {
-          const delayMs = Math.min(1000 * 2 ** attempt, 8000);
+        if (isRetryableConnectionError(err) && attempt < maxAttempts - 1) {
+          const delayMs = Math.min(1000 * 2 ** attempt, 16000);
           await new Promise((res) => setTimeout(res, delayMs));
           continue;
         }
@@ -47,7 +49,14 @@ class NeonRetryPool extends Pool {
 
 export const pool = new NeonRetryPool({
   connectionString,
-  connectionTimeoutMillis: 10000,
+  // 30 s gives Neon time to wake from suspension (cold start can take ~20 s)
+  connectionTimeoutMillis: 30000,
+});
+
+// Prevent unhandled 'error' events on the pool from crashing the process.
+// Individual query errors are already caught in route handlers.
+pool.on("error", (err) => {
+  console.error("[db] pool error:", err.message);
 });
 export const db = drizzle(pool, { schema });
 
