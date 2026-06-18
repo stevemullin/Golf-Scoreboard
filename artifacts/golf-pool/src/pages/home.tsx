@@ -21,15 +21,13 @@ export default function Home() {
   const [mode, setMode] = useState<"live" | "manual">("live");
   
   const { data: scoreboard, isLoading } = useGetScoreboard({
-    query: {
-      refetchInterval: 60000,
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { refetchInterval: 60000 } as any,
   });
 
   const { data: manualScoreboard } = useGetManualScoreboard({
-    query: {
-      enabled: mode === "manual"
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { enabled: mode === "manual" } as any,
   });
 
   const updateScore = useUpdateManualScore();
@@ -191,7 +189,7 @@ export default function Home() {
                       >
                         <TableCell className="text-center font-mono font-bold text-lg">{entry.rank}</TableCell>
                         <TableCell className="font-bold text-lg">{entry.name}</TableCell>
-                        <TableCell className={`text-right font-mono font-bold text-lg ${entry.toPar !== null && entry.toPar < 0 ? 'text-primary' : entry.toPar && entry.toPar > 0 ? 'text-muted-foreground' : ''}`}>
+                        <TableCell className={`text-right font-mono font-bold text-lg ${entry.toPar != null && entry.toPar < 0 ? 'text-primary' : entry.toPar != null && entry.toPar > 0 ? 'text-muted-foreground' : ''}`}>
                           {formatScore(entry.toPar)}
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground text-sm font-mono">{entry.thru}</TableCell>
@@ -267,7 +265,7 @@ export default function Home() {
                         }
                         const agg = golferMap.get(g.golferId)!;
                         const idx = round.roundNumber - 1;
-                        agg.roundScores[idx] = g.scoreToPar;
+                        agg.roundScores[idx] = g.scoreToPar ?? null;
                         agg.roundCounted[idx] = g.counted ?? null;
                         agg.roundIsPenalty[idx] = g.isPenalty;
                         if (g.isCut) agg.isCut = true;
@@ -275,7 +273,7 @@ export default function Home() {
                         if (g.isDq) agg.isDq = true;
                         if (round.roundNumber === currentRound) {
                           agg.holesCompleted = g.holesCompleted;
-                          agg.teeTime = g.teeTime;
+                          agg.teeTime = g.teeTime ?? null;
                         }
                       }
                     }
@@ -302,7 +300,7 @@ export default function Home() {
                       <Card key={entry.poolMemberId} id={`team-${entry.poolMemberId}`} className="bg-card border-card-border overflow-hidden rounded-xl shadow-lg">
                         <div className="bg-black/40 p-4 border-b border-border flex items-center justify-between">
                           <h3 className="font-bold text-xl">{entry.name}'s Team</h3>
-                          <span className={`text-2xl font-mono font-bold ${entry.toPar !== null && entry.toPar < 0 ? 'text-primary' : entry.toPar !== null && entry.toPar > 0 ? 'text-muted-foreground' : ''}`}>
+                          <span className={`text-2xl font-mono font-bold ${entry.toPar != null && entry.toPar < 0 ? 'text-primary' : entry.toPar != null && entry.toPar > 0 ? 'text-muted-foreground' : ''}`}>
                             {formatScore(entry.toPar)}
                           </span>
                         </div>

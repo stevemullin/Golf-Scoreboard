@@ -51,7 +51,7 @@ export async function fetchESPNScoreboard(espnEventId?: string): Promise<{
       return null;
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
 
     if (!data.events || data.events.length === 0) {
       logger.warn("ESPN API returned no events");
@@ -160,7 +160,7 @@ export async function fetchESPNField(espnEventId: string): Promise<ESPNGolfer[]>
     const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!response.ok) return [];
 
-    const data = await response.json();
+    const data = await response.json() as any;
 
     // Find the matching event
     let event = data.events?.[0];

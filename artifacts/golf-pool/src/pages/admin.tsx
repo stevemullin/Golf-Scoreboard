@@ -49,15 +49,13 @@ export default function Admin() {
   const selectedTourneyEspnId = tournaments?.find(t => t.id === pickTourneyId)?.espnEventId;
 
   const { data: field } = useGetTournamentField({ espnEventId: selectedTourneyEspnId || "" }, {
-    query: {
-      enabled: !!selectedTourneyEspnId,
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { enabled: !!selectedTourneyEspnId } as any,
   });
 
   const { data: existingPicks, refetch: refetchPicks } = useGetMemberPicks(pickTourneyId, pickMemberId, {
-    query: {
-      enabled: !!pickTourneyId && !!pickMemberId
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { enabled: !!pickTourneyId && !!pickMemberId } as any,
   });
 
   const [selectedGolfers, setSelectedGolfers] = useState<string[]>([]);
