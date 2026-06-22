@@ -63,11 +63,12 @@ and the built frontend (SPA) for everything else, so the whole app runs as a
     / 70 PGA & Open, or off). During round 2 the board shows a projected cut line
     and a yellow/red **RISK** badge on at-risk golfers.
   - **Golfer Tiers** (majors) — "Build from odds" pulls the major's winner odds
-    (The-Odds-API), orders the field, and splits it into 5 tiers at the biggest
-    odds gaps; the splits are set by moving 4 dividers, unmatched players default
-    to T5. When a tournament has tiers, **pick entry switches to tiered slots**
-    (1 per tier + a 6th from T4/T5), enforced in the UI and on save; re-tiering
-    flags any picks it invalidates.
+    (The-Odds-API) and orders the field by odds, then splits it into 5 tiers of 8
+    by default (T1 = 1–8, T2 = 9–16, …). Adjust by **dragging** the 4 divider
+    lines (or their ▲▼); unmatched players default to T5. When a tournament has
+    tiers, **pick entry switches to tiered slots** (1 per tier + a 6th from
+    T4/T5, each dropdown sorted by odds best-first), enforced in the UI and on
+    save; re-tiering flags any picks it invalidates.
   - Force an ESPN refresh; **download a full JSON backup**.
 - **Champion celebration** — banner + confetti when a tournament goes Final.
 
