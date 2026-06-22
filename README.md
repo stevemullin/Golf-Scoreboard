@@ -69,13 +69,19 @@ and the built frontend (SPA) for everything else, so the whole app runs as a
     tiers, **pick entry switches to tiered slots** (1 per tier + a 6th from
     T4/T5, each dropdown sorted by odds best-first), enforced in the UI and on
     save; re-tiering flags any picks it invalidates.
+  - **Self-service picks** — each member gets a private link (`/me/<token>`) and
+    makes/edits their own tiered picks until an admin-set lock time, after which
+    they freeze (admin can still edit). Admin sees who has submitted; pick
+    *contents* stay hidden before lock (fairness). Email reminders are a later phase.
   - Force an ESPN refresh; **download a full JSON backup**.
 - **Champion celebration** — banner + confetti when a tournament goes Final.
 
 ## Data model (Postgres)
 
 `tournaments`, `pool_members`, `golfers`, `golfer_scores`, `team_picks`,
-`manual_scores`, `api_cache`, `golfer_tiers`. Schema lives in `lib/db/src/schema/`.
+`manual_scores`, `api_cache`, `golfer_tiers`, `pick_submissions`. Schema lives in
+`lib/db/src/schema/`. (`pool_members` carries `email` + a secret `access_token`;
+`tournaments` carries `picks_lock_at`.)
 
 ## API endpoints
 
@@ -100,6 +106,11 @@ GET    /api/admin/events?year=            PGA schedule (for the picker)
 POST   /api/admin/tiers/suggest           fetch major odds + match to field
 GET    /api/admin/tiers?tournamentId=     saved tiers for a tournament
 POST   /api/admin/tiers                   save tier assignments
+POST   /api/admin/members                 admin roster + submission status (masked)
+PATCH  /api/admin/pool-member/:id         update a member's email
+POST   /api/admin/tournament/:id/lock     set/clear participant pick deadline
+GET    /api/me/:token                     participant's own event + tiers + picks
+POST   /api/me/:token/picks               participant submits/updates own picks
 POST   /api/admin/refresh                 force ESPN refresh
 POST   /api/admin/export                  download full JSON backup
 ```

@@ -9,11 +9,13 @@ import {
   golferScoresTable,
   manualScoresTable,
   golferTiersTable,
+  pickSubmissionsTable,
 } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { fetchESPNField, fetchESPNScoreboard, fetchESPNEvents } from "../lib/espn";
 import { refreshFromESPN } from "../lib/scoring";
 import { majorSportKey, fetchMajorOdds, normalizeName } from "../lib/odds";
+import { validateTieredPicks } from "../lib/tier-rules";
 
 const router = Router();
 
@@ -30,29 +32,6 @@ function checkPassword(password: string): boolean {
 function normalizeCutSize(v: unknown): number | null {
   const n = Number(v);
   return n === 50 || n === 60 || n === 70 ? n : null;
-}
-
-// Tiered-pick rule: one golfer from each of T1/T2/T3, plus T4+T5 totaling three
-// with at least one each (i.e. a 6th from T4 or T5). All six distinct + tiered.
-function validateTieredPicks(
-  tierByGolfer: Map<string, number>,
-  golferIds: string[],
-): { valid: boolean; reason?: string } {
-  if (golferIds.length !== 6) return { valid: false, reason: "Need exactly 6 picks" };
-  if (new Set(golferIds).size !== 6) return { valid: false, reason: "Duplicate golfer in picks" };
-  const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  for (const id of golferIds) {
-    const t = tierByGolfer.get(id);
-    if (!t) return { valid: false, reason: "A pick is not assigned to any tier" };
-    counts[t] = (counts[t] ?? 0) + 1;
-  }
-  if (counts[1] !== 1 || counts[2] !== 1 || counts[3] !== 1) {
-    return { valid: false, reason: "Need exactly one golfer from each of T1, T2 and T3" };
-  }
-  if (counts[4]! + counts[5]! !== 3 || counts[4]! < 1 || counts[5]! < 1) {
-    return { valid: false, reason: "Need one from T4 and one from T5, plus one extra from T4 or T5" };
-  }
-  return { valid: true };
 }
 
 // POST /admin/verify - Check password without side effects
@@ -230,7 +209,7 @@ router.post("/admin/tournament/:tournamentId/activate", async (req, res) => {
 // POST /admin/pool-member
 router.post("/admin/pool-member", async (req, res) => {
   try {
-    const { name, password } = req.body;
+    const { name, email, password } = req.body;
 
     if (!checkPassword(password)) {
       res.status(401).json({ error: "Invalid password" });
@@ -242,16 +221,112 @@ router.post("/admin/pool-member", async (req, res) => {
       return;
     }
 
-    const member = await db.insert(poolMembersTable).values({ name }).returning().then(r => r[0]);
+    const member = await db.insert(poolMembersTable).values({ name, email: email || null }).returning().then(r => r[0]);
 
     res.status(201).json({
       id: member.id,
       name: member.name,
+      email: member.email,
+      accessToken: member.accessToken,
       createdAt: member.createdAt.toISOString(),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to create pool member");
     res.status(500).json({ error: "Failed to create pool member" });
+  }
+});
+
+// PATCH /admin/pool-member/:id - update a member's email (e.g. to backfill)
+router.patch("/admin/pool-member/:id", async (req, res) => {
+  try {
+    const { email, name, password } = req.body;
+    if (!checkPassword(password)) {
+      res.status(401).json({ error: "Invalid password" });
+      return;
+    }
+    const updates: { email?: string | null; name?: string } = {};
+    if (email !== undefined) updates.email = email || null;
+    if (name !== undefined && name) updates.name = name;
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: "Nothing to update" });
+      return;
+    }
+    const member = await db.update(poolMembersTable).set(updates).where(eq(poolMembersTable.id, req.params.id)).returning().then(r => r[0]);
+    if (!member) {
+      res.status(404).json({ error: "Member not found" });
+      return;
+    }
+    res.json({ id: member.id, name: member.name, email: member.email, accessToken: member.accessToken });
+  } catch (err) {
+    req.log.error({ err }, "Failed to update pool member");
+    res.status(500).json({ error: "Failed to update pool member" });
+  }
+});
+
+// POST /admin/members - admin roster with tokens + per-tournament submission
+// status (POST so the password + tournamentId stay out of the URL/logs).
+// Picks are intentionally NOT returned here — fairness masking (#2).
+router.post("/admin/members", async (req, res) => {
+  try {
+    const { password, tournamentId } = req.body;
+    if (!checkPassword(password)) {
+      res.status(401).json({ error: "Invalid password" });
+      return;
+    }
+    const members = await db.select().from(poolMembersTable);
+    members.sort((a, b) => a.name.localeCompare(b.name));
+
+    let submittedSet = new Set<string>();
+    let pickCounts = new Map<string, number>();
+    if (tournamentId) {
+      const subs = await db.select({ poolMemberId: pickSubmissionsTable.poolMemberId })
+        .from(pickSubmissionsTable).where(eq(pickSubmissionsTable.tournamentId, tournamentId));
+      submittedSet = new Set(subs.map((s) => s.poolMemberId));
+      const picks = await db.select({ poolMemberId: teamPicksTable.poolMemberId })
+        .from(teamPicksTable).where(eq(teamPicksTable.tournamentId, tournamentId));
+      for (const p of picks) pickCounts.set(p.poolMemberId, (pickCounts.get(p.poolMemberId) ?? 0) + 1);
+    }
+
+    res.json(members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      accessToken: m.accessToken,
+      submitted: submittedSet.has(m.id),
+      pickCount: pickCounts.get(m.id) ?? 0,
+    })));
+  } catch (err) {
+    req.log.error({ err }, "Failed to list members");
+    res.status(500).json({ error: "Failed to list members" });
+  }
+});
+
+// POST /admin/tournament/:id/lock - set/clear the participant pick deadline
+router.post("/admin/tournament/:id/lock", async (req, res) => {
+  try {
+    const { password, picksLockAt } = req.body;
+    if (!checkPassword(password)) {
+      res.status(401).json({ error: "Invalid password" });
+      return;
+    }
+    let value: Date | null = null;
+    if (picksLockAt) {
+      const d = new Date(picksLockAt);
+      if (isNaN(d.getTime())) {
+        res.status(400).json({ error: "Invalid date" });
+        return;
+      }
+      value = d;
+    }
+    const t = await db.update(tournamentsTable).set({ picksLockAt: value }).where(eq(tournamentsTable.id, req.params.id)).returning().then(r => r[0]);
+    if (!t) {
+      res.status(404).json({ error: "Tournament not found" });
+      return;
+    }
+    res.json({ id: t.id, picksLockAt: t.picksLockAt?.toISOString() ?? null });
+  } catch (err) {
+    req.log.error({ err }, "Failed to set lock time");
+    res.status(500).json({ error: "Failed to set lock time" });
   }
 });
 
