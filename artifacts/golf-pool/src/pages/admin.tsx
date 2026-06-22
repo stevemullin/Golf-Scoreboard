@@ -43,6 +43,8 @@ export default function Admin() {
   const [tierList, setTierList] = useState<{ golferId: string; name: string; odds: number | null }[]>([]);
   const [tierBreaks, setTierBreaks] = useState<number[]>([]); // up to 4 sorted indices where a new tier starts
   const [tierBusy, setTierBusy] = useState(false);
+  const tierListRef = React.useRef<HTMLDivElement>(null);
+  const dragK = React.useRef<number | null>(null);
   React.useEffect(() => {
     if (!isAuthenticated) return;
     fetch("/api/admin/events")
@@ -264,16 +266,39 @@ export default function Admin() {
   };
 
   // move the divider nearest to gap p (before golfer index p) to p
-  const moveBreakNear = (p: number) => {
+  const TIER_ROW = 32; // px per row — must match the row height in the list below
+
+  // Move divider k to a new index, clamped strictly between its neighbours so
+  // dividers can never cross or coincide (keeps the 4 splits ordered).
+  const setDivider = (k: number, idx: number) => {
     setTierBreaks((breaks) => {
-      if (breaks.includes(p)) return breaks;
-      if (breaks.length < 4) return Array.from(new Set([...breaks, p])).sort((a, b) => a - b);
-      let nearest = 0;
-      for (let i = 1; i < breaks.length; i++) {
-        if (Math.abs(breaks[i]! - p) < Math.abs(breaks[nearest]! - p)) nearest = i;
-      }
-      return Array.from(new Set(breaks.map((b, i) => (i === nearest ? p : b)))).sort((a, b) => a - b);
+      const len = tierList.length;
+      const lo = k === 0 ? 1 : breaks[k - 1]! + 1;
+      const hi = k === breaks.length - 1 ? len - 1 : breaks[k + 1]! - 1;
+      const clamped = Math.max(lo, Math.min(hi, idx));
+      if (clamped === breaks[k]) return breaks;
+      const next = breaks.slice();
+      next[k] = clamped;
+      return next;
     });
+  };
+
+  const onHandleDown = (k: number) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragK.current = k;
+  };
+  const onHandleMove = (e: React.PointerEvent) => {
+    const el = tierListRef.current;
+    if (dragK.current == null || !el) return;
+    const rect = el.getBoundingClientRect();
+    setDivider(dragK.current, Math.round((e.clientY - rect.top + el.scrollTop) / TIER_ROW));
+    if (e.clientY < rect.top + 24) el.scrollTop -= 12;
+    else if (e.clientY > rect.bottom - 24) el.scrollTop += 12;
+  };
+  const onHandleUp = (e: React.PointerEvent) => {
+    if (dragK.current != null) e.currentTarget.releasePointerCapture(e.pointerId);
+    dragK.current = null;
   };
 
   const saveTiers = async () => {
@@ -623,38 +648,55 @@ export default function Admin() {
               ) : (
                 <>
                   <p className="text-xs text-muted-foreground">
-                    Players stay in odds order — click a gap (or a divider) to move the nearest of the 4 dividers there. Bigger odds jumps are highlighted. {" "}
+                    Players stay in odds order. <strong className="text-foreground">Drag a divider line</strong> (or use its ▲▼) to set where each tier splits — amber lines mark the biggest odds gaps. {" "}
                     {[1, 2, 3, 4, 5].map((t) => `T${t}:${tierList.filter((_, i) => tierAt(i, tierBreaks) === t).length}`).join(" · ")}
                   </p>
-                  <div className="max-h-[520px] overflow-y-auto rounded border border-border/40">
-                    {tierList.map((g, i) => {
-                      const t = tierAt(i, tierBreaks);
-                      const isBreak = tierBreaks.includes(i);
-                      const tierBg = ["", "bg-primary/10", "bg-sky-500/10", "bg-emerald-500/10", "bg-amber-500/10", "bg-muted/40"][t];
-                      const prob = (x: number | null) => (x == null ? null : x >= 0 ? 100 / (x + 100) : -x / (-x + 100));
-                      const prev = i > 0 ? tierList[i - 1] : null;
-                      const pa = prev ? prob(prev.odds) : null;
-                      const pc = prob(g.odds);
-                      const jump = pa != null && pc != null ? Math.round((pa - pc) * 1000) / 10 : null;
-                      return (
-                        <div key={g.golferId}>
-                          {i > 0 &&
-                            (isBreak ? (
-                              <button onClick={() => moveBreakNear(i)} className="w-full flex items-center justify-center gap-2 px-2 py-0.5 bg-primary/25 border-y border-primary/50 text-[10px] font-bold uppercase tracking-wider text-primary">
-                                ── T{t} ──{jump != null ? <span className="text-primary/70 normal-case font-normal">jump {jump}%</span> : null}
-                              </button>
-                            ) : (
-                              <button onClick={() => moveBreakNear(i)} title="Move nearest divider here" className="w-full h-2 flex items-center group">
-                                <span className={`h-px w-full ${jump != null && jump >= 1 ? "bg-amber-500/50" : "bg-transparent"} group-hover:bg-primary/60`} />
-                              </button>
-                            ))}
-                          <div className={`flex items-center justify-between gap-2 text-sm px-2 py-1 ${tierBg}`}>
+                  <div ref={tierListRef} className="max-h-[520px] overflow-y-auto rounded border border-border/40 relative select-none">
+                    <div className="relative" style={{ height: tierList.length * TIER_ROW }}>
+                      {tierList.map((g, i) => {
+                        const t = tierAt(i, tierBreaks);
+                        const tierBg = ["", "bg-primary/10", "bg-sky-500/10", "bg-emerald-500/10", "bg-amber-500/10", "bg-muted/40"][t];
+                        const prob = (x: number | null) => (x == null ? null : x >= 0 ? 100 / (x + 100) : -x / (-x + 100));
+                        const prev = i > 0 ? tierList[i - 1] : null;
+                        const pa = prev ? prob(prev.odds) : null;
+                        const pc = prob(g.odds);
+                        const bigGap = pa != null && pc != null && (pa - pc) * 100 >= 1;
+                        return (
+                          <div
+                            key={g.golferId}
+                            className={`absolute left-0 right-0 flex items-center justify-between gap-2 text-sm px-2 ${tierBg} ${bigGap ? "border-t border-amber-500/50" : ""}`}
+                            style={{ top: i * TIER_ROW, height: TIER_ROW }}
+                          >
                             <span className="truncate"><span className="text-muted-foreground text-xs mr-2 tabular-nums">{i + 1}</span>{g.name}</span>
                             <span className="font-mono text-xs text-muted-foreground shrink-0">{g.odds != null ? (g.odds > 0 ? `+${g.odds}` : `${g.odds}`) : "—"}</span>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                      {tierBreaks.map((b, k) => {
+                        const prob = (x: number | null) => (x == null ? null : x >= 0 ? 100 / (x + 100) : -x / (-x + 100));
+                        const pa = b > 0 ? prob(tierList[b - 1]?.odds ?? null) : null;
+                        const pc = prob(tierList[b]?.odds ?? null);
+                        const jump = pa != null && pc != null ? Math.round((pa - pc) * 1000) / 10 : null;
+                        return (
+                          <div
+                            key={k}
+                            onPointerDown={onHandleDown(k)}
+                            onPointerMove={onHandleMove}
+                            onPointerUp={onHandleUp}
+                            className="absolute left-0 right-0 z-10 flex items-center cursor-grab active:cursor-grabbing"
+                            style={{ top: b * TIER_ROW - 11, height: 22, touchAction: "none" }}
+                          >
+                            <div className="h-0.5 w-full bg-primary" />
+                            <div className="absolute right-1 flex items-center gap-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow">
+                              <span>T{k + 1}▕T{k + 2}</span>
+                              {jump != null ? <span className="font-normal normal-case opacity-80">{jump}%</span> : null}
+                              <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setDivider(k, b - 1); }} className="px-0.5 leading-none hover:opacity-70" title="Up one">▲</button>
+                              <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setDivider(k, b + 1); }} className="px-0.5 leading-none hover:opacity-70" title="Down one">▼</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </>
               )}
