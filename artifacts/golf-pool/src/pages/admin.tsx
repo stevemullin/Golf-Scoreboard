@@ -73,7 +73,7 @@ export default function Admin() {
   });
 
   const [selectedGolfers, setSelectedGolfers] = useState<string[]>([]);
-  const [pickTiers, setPickTiers] = useState<{ golferId: string; name: string; tier: number }[]>([]);
+  const [pickTiers, setPickTiers] = useState<{ golferId: string; name: string; tier: number; odds: number | null }[]>([]);
   const tieredMode = pickTiers.length > 0;
   const [pickSlots, setPickSlots] = useState<{ [k: string]: string }>({ t1: "", t2: "", t3: "", t4: "", t5: "", extra: "" });
 
@@ -211,6 +211,10 @@ export default function Admin() {
     return Array.from(set).sort((a, b) => a - b).slice(0, 4);
   };
 
+  // Default splits: 8 golfers per tier (T1 1-8, T2 9-16, T3 17-24, T4 25-32, T5 33+).
+  const evenEight = (len: number): number[] =>
+    Array.from(new Set([8, 16, 24, 32].map((p) => Math.min(p, len - 1)).filter((p) => p >= 1))).sort((a, b) => a - b);
+
   const loadTiers = async (tid: string) => {
     setTierTourneyId(tid);
     setTierList([]);
@@ -252,7 +256,7 @@ export default function Admin() {
         ...data.unmatched.map((u: any) => ({ golferId: u.golferId, name: u.name, odds: null })),
       ];
       setTierList(list);
-      setTierBreaks(normalizeBreaks(data.suggestedBreaks || [], list.length));
+      setTierBreaks(evenEight(list.length));
       if (data.matched.length === 0) {
         toast({ title: "No odds posted for this event", description: "A major is only priced from ~3 weeks before until it ends. Right now just the upcoming major (The Open) has odds.", variant: "destructive" });
       } else {
@@ -440,11 +444,15 @@ export default function Admin() {
 
   const setSlot = (slot: string, golferId: string) => setPickSlots((s) => ({ ...s, [slot]: golferId }));
 
-  // Golfers eligible for a slot: in the slot's tier(s) and not used by another slot.
-  const slotOptions = (tiers: number[], slotKey: string) =>
-    pickTiers.filter(
-      (g) => tiers.includes(g.tier) && (pickSlots[slotKey] === g.golferId || !Object.values(pickSlots).includes(g.golferId)),
-    );
+  // Golfers eligible for a slot: in the slot's tier(s), not used by another slot,
+  // sorted by odds best-first (favorites first; unpriced golfers last). This also
+  // orders the combined T4+T5 "Extra" dropdown by odds across both tiers.
+  const slotOptions = (tiers: number[], slotKey: string) => {
+    const prob = (a: number | null) => (a == null ? -1 : a >= 0 ? 100 / (a + 100) : -a / (-a + 100));
+    return pickTiers
+      .filter((g) => tiers.includes(g.tier) && (pickSlots[slotKey] === g.golferId || !Object.values(pickSlots).includes(g.golferId)))
+      .sort((a, b) => prob(b.odds) - prob(a.odds));
+  };
 
   const handleSavePicks = () => {
     if (!pickTourneyId || !pickMemberId) return;
@@ -786,7 +794,7 @@ export default function Admin() {
                             <Select value={pickSlots[slot] || ""} onValueChange={(v) => setSlot(slot, v)}>
                               <SelectTrigger className="flex-1"><SelectValue placeholder={`Pick ${label}`} /></SelectTrigger>
                               <SelectContent>
-                                {slotOptions(tiers, slot).map((g) => (<SelectItem key={g.golferId} value={g.golferId}>{g.name}</SelectItem>))}
+                                {slotOptions(tiers, slot).map((g) => (<SelectItem key={g.golferId} value={g.golferId}>{g.name}{g.odds != null ? ` · ${g.odds > 0 ? "+" : ""}${g.odds}` : ""}</SelectItem>))}
                               </SelectContent>
                             </Select>
                           </div>
