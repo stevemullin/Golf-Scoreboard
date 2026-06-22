@@ -36,6 +36,8 @@ app.use(express.urlencoded({ extended: true }));
 // Frontend is served same-origin by this server, so CORS isn't needed.
 // Brute-force guard on the password-protected admin endpoints.
 app.use("/api/admin", rateLimit({ windowMs: 60_000, max: 30 }));
+// Light guard on the token-gated participant endpoints (deters token guessing).
+app.use("/api/me", rateLimit({ windowMs: 60_000, max: 60 }));
 
 app.use("/api", router);
 

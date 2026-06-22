@@ -53,6 +53,10 @@ export default function Admin() {
       .catch(() => {});
   }, [isAuthenticated]);
   const [newMember, setNewMember] = useState("");
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [adminMembers, setAdminMembers] = useState<{ id: string; name: string; email: string | null; accessToken: string; submitted: boolean; pickCount: number }[]>([]);
+  const [emailDraft, setEmailDraft] = useState<{ [id: string]: string }>({});
+  const [lockDraft, setLockDraft] = useState<{ [id: string]: string }>({});
   const [editingEspnId, setEditingEspnId] = useState<string | null>(null);
   const [editingEspnValue, setEditingEspnValue] = useState("");
   
@@ -397,20 +401,88 @@ export default function Admin() {
     }
   };
 
+  const loadAdminMembers = React.useCallback(() => {
+    if (!password) return;
+    fetch("/api/admin/members", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password, tournamentId: activeTournament?.id }),
+    })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => {
+        if (Array.isArray(rows)) {
+          setAdminMembers(rows);
+          setEmailDraft(Object.fromEntries(rows.map((m: { id: string; email: string | null }) => [m.id, m.email || ""])));
+        }
+      })
+      .catch(() => {});
+  }, [password, activeTournament?.id]);
+
+  React.useEffect(() => {
+    if (isAuthenticated) loadAdminMembers();
+  }, [isAuthenticated, loadAdminMembers]);
+
   const handleCreateMember = () => {
-    createMember.mutate({
-      data: { name: newMember, password }
-    }, {
-      onSuccess: () => {
+    if (!newMember) return;
+    fetch("/api/admin/pool-member", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newMember, email: newMemberEmail || undefined, password }),
+    })
+      .then(async (r) => {
+        if (r.status === 401) { handle401(); return; }
+        if (!r.ok) { toast({ title: "Error adding member", variant: "destructive" }); return; }
         toast({ title: "Member Added" });
         refetchMembers();
+        loadAdminMembers();
         setNewMember("");
-      },
-      onError: (e: unknown) => {
-        if (isUnauth(e)) { handle401(); return; }
-        toast({ title: "Error adding member", description: apiErr(e), variant: "destructive" });
-      }
-    });
+        setNewMemberEmail("");
+      })
+      .catch(() => toast({ title: "Could not reach server", variant: "destructive" }));
+  };
+
+  const saveMemberEmail = (id: string) => {
+    fetch(`/api/admin/pool-member/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: emailDraft[id] ?? "", password }),
+    })
+      .then((r) => {
+        if (r.status === 401) { handle401(); return; }
+        if (r.ok) { toast({ title: "Email saved" }); loadAdminMembers(); }
+        else toast({ title: "Couldn't save email", variant: "destructive" });
+      })
+      .catch(() => toast({ title: "Could not reach server", variant: "destructive" }));
+  };
+
+  const copyMyLink = (token: string) => {
+    const url = `${window.location.origin}/me/${token}`;
+    navigator.clipboard?.writeText(url).then(
+      () => toast({ title: "Link copied", description: url }),
+      () => toast({ title: "Copy this link", description: url }),
+    );
+  };
+
+  // ISO timestamp -> value for a <input type="datetime-local"> (local time)
+  const toLocalInput = (iso: string | null | undefined) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+
+  const handleSetLock = (tournamentId: string, localValue: string) => {
+    const iso = localValue ? new Date(localValue).toISOString() : null;
+    fetch(`/api/admin/tournament/${tournamentId}/lock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ picksLockAt: iso, password }),
+    })
+      .then((r) => {
+        if (r.status === 401) { handle401(); return; }
+        if (r.ok) { toast({ title: "Pick deadline saved" }); refetchTournaments(); }
+        else toast({ title: "Couldn't save deadline", variant: "destructive" });
+      })
+      .catch(() => toast({ title: "Could not reach server", variant: "destructive" }));
   };
 
   const handleActivate = (id: string) => {
@@ -609,6 +681,19 @@ export default function Admin() {
                           </Button>
                         </div>
                       )}
+                      <div className="flex items-center gap-2 pt-1 flex-wrap">
+                        <span className="text-xs uppercase tracking-wider text-muted-foreground whitespace-nowrap">Picks lock</span>
+                        <Input
+                          type="datetime-local"
+                          value={lockDraft[t.id] ?? toLocalInput((t as any).picksLockAt)}
+                          onChange={e => setLockDraft({ ...lockDraft, [t.id]: e.target.value })}
+                          className="h-8 text-xs bg-input border-border w-[220px]"
+                        />
+                        <Button size="sm" variant="outline" onClick={() => handleSetLock(t.id, lockDraft[t.id] ?? toLocalInput((t as any).picksLockAt))} className="h-8 text-xs uppercase tracking-wider">Save</Button>
+                        {(t as any).picksLockAt && (
+                          <Button size="sm" variant="ghost" onClick={() => { setLockDraft({ ...lockDraft, [t.id]: "" }); handleSetLock(t.id, ""); }} className="h-8 text-xs text-muted-foreground">Clear</Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                   {tournaments?.length === 0 && (
@@ -717,18 +802,43 @@ export default function Admin() {
                 <CardTitle className="text-xl uppercase tracking-wider text-primary">Pool Members</CardTitle>
               </CardHeader>
               <CardContent className="p-6 space-y-6">
-                <div className="flex gap-2 items-end">
-                  <div className="space-y-2 flex-1">
-                    <Label>New Member Name</Label>
+                <div className="flex gap-2 items-end flex-wrap">
+                  <div className="space-y-2 flex-1 min-w-[140px]">
+                    <Label>Name</Label>
                     <Input value={newMember} onChange={e => setNewMember(e.target.value)} placeholder="e.g. John Doe" />
                   </div>
-                  <Button onClick={handleCreateMember} disabled={createMember.isPending || !newMember} className="uppercase font-bold tracking-wider">Add</Button>
+                  <div className="space-y-2 flex-1 min-w-[180px]">
+                    <Label>Email (for their pick link)</Label>
+                    <Input value={newMemberEmail} onChange={e => setNewMemberEmail(e.target.value)} placeholder="john@example.com" />
+                  </div>
+                  <Button onClick={handleCreateMember} disabled={!newMember} className="uppercase font-bold tracking-wider">Add</Button>
                 </div>
-                <div className="flex flex-wrap gap-2 pt-4">
-                  {poolMembers?.map(m => (
-                    <Badge key={m.id} variant="secondary" className="px-3 py-1 text-sm bg-background border border-border">{m.name}</Badge>
+
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold uppercase text-sm text-muted-foreground">Members</h3>
+                    {activeTournament && adminMembers.length > 0 && (
+                      <span className="text-xs text-muted-foreground">Submitted: {adminMembers.filter(m => m.submitted).length}/{adminMembers.length}</span>
+                    )}
+                  </div>
+                  {adminMembers.length === 0 && <span className="text-sm text-muted-foreground">No members added yet</span>}
+                  {adminMembers.map(m => (
+                    <div key={m.id} className="p-3 bg-background rounded-md border border-border space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold">{m.name}</span>
+                        {activeTournament && (
+                          m.submitted
+                            ? <span className="text-[10px] rounded bg-primary px-2 py-0.5 text-primary-foreground uppercase tracking-wider">Submitted ✓</span>
+                            : <span className="text-[10px] rounded bg-yellow-500/20 text-yellow-500 px-2 py-0.5 uppercase tracking-wider">Not yet ✗</span>
+                        )}
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <Input value={emailDraft[m.id] ?? ""} onChange={e => setEmailDraft({ ...emailDraft, [m.id]: e.target.value })} placeholder="email@example.com" className="h-8 text-sm" />
+                        <Button size="sm" variant="outline" onClick={() => saveMemberEmail(m.id)} className="h-8 text-xs uppercase tracking-wider">Save</Button>
+                        <Button size="sm" variant="ghost" onClick={() => copyMyLink(m.accessToken)} className="h-8 text-xs uppercase tracking-wider text-muted-foreground hover:text-primary whitespace-nowrap">Copy link</Button>
+                      </div>
+                    </div>
                   ))}
-                  {poolMembers?.length === 0 && <span className="text-sm text-muted-foreground">No members added yet</span>}
                 </div>
               </CardContent>
             </Card>

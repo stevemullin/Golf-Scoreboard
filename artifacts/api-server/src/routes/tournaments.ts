@@ -19,6 +19,7 @@ router.get("/tournaments", async (req, res) => {
       currentRound: t.currentRound,
       isActive: t.isActive,
       cutSize: t.cutSize,
+      picksLockAt: t.picksLockAt?.toISOString() ?? null,
       createdAt: t.createdAt.toISOString(),
     }));
 

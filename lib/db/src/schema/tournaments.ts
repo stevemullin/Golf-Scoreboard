@@ -12,6 +12,8 @@ export const tournamentsTable = pgTable("tournaments", {
   isActive: boolean("is_active").notNull().default(false),
   // Field size for the projected cut (50/60/70). null = cut indicator disabled.
   cutSize: integer("cut_size"),
+  // Participant picks freeze at this time; null = not set (no self-service lock).
+  picksLockAt: timestamp("picks_lock_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
