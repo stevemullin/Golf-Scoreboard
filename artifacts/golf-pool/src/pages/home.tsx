@@ -79,16 +79,20 @@ export default function Home() {
   const picksLockAt =
     (scoreboard?.tournament as unknown as { picksLockAt?: string | null } | undefined)?.picksLockAt ?? null;
 
-  // Fire confetti once when the tournament goes Final (not on every 60s refetch).
+  // Only celebrate a *revealed* champion — never while picks are still masked
+  // (a tournament can read "Final" from ESPN before our picks reveal).
+  const showChampion = isFinal && picksRevealed && champions.length > 0;
+
+  // Fire confetti once when there's a champion to celebrate (not every refetch).
   useEffect(() => {
-    if (isFinal && !celebratedRef.current) {
+    if (showChampion && !celebratedRef.current) {
       celebratedRef.current = true;
       setShowConfetti(true);
       const t = setTimeout(() => setShowConfetti(false), 9000);
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [isFinal]);
+  }, [showChampion]);
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground p-4 md:p-8 font-sans pb-24">
@@ -124,7 +128,7 @@ export default function Home() {
           </div>
         </header>
 
-        {isFinal && champions.length > 0 && (
+        {showChampion && (
           <ChampionBanner names={champions.map((c) => c.name)} toPar={champions[0].toPar ?? null} />
         )}
 
