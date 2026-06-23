@@ -2,6 +2,10 @@
 
 Ideas captured for later — not yet scheduled. Each needs a design pass before building.
 
+> **Note:** Golfer Tiers and Self-service pick entry have since **shipped** — see
+> [ROADMAP.md](ROADMAP.md) for current status and what's left. This file is kept
+> as the original idea capture.
+
 ## Golfer Tiers (needs design)
 
 Picks are made from **5 tiers** built on pre-tournament odds to win.
