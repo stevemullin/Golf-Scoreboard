@@ -90,6 +90,9 @@ and the built frontend (SPA) for everything else, so the whole app runs as a
     so Gmail won't work) — a no-op without them.
   - Force an ESPN refresh; **download a full JSON backup**.
 - **Champion celebration** — banner + confetti when a tournament goes Final.
+- **History page** (`/history`) — analytics across all completed events: all-time
+  standings (titles, win %, avg finish, best score), champions by event,
+  most-picked golfers, and best/worst team records.
 
 ## Data model (Postgres)
 
@@ -104,6 +107,7 @@ and the built frontend (SPA) for everything else, so the whole app runs as a
 GET    /api/healthz                       liveness
 GET    /api/healthz/db                    liveness + DB ping (used by keep-alive)
 GET    /api/scoreboard[?tournamentId=]    live leaderboard (+ projectedCut); any event by id
+GET    /api/history                       all-time analytics across completed events
 GET    /api/scoreboard/manual             manual leaderboard
 PUT    /api/scoreboard/manual             save a manual score
 GET    /api/tournaments                   list tournaments
