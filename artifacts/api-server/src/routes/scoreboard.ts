@@ -26,22 +26,23 @@ router.get("/scoreboard", async (req, res) => {
       return;
     }
 
-    const cache = await db.select().from(apiCacheTable)
-      .where(eq(apiCacheTable.tournamentId, activeTournament.id))
-      .then(r => r[0]);
-
+    // The leaderboard call may refresh from ESPN and update the tournament row,
+    // so it runs first; everything downstream is independent and runs in one
+    // parallel batch (each query is a full Neon round-trip — serializing them
+    // was costing ~2s per page load).
     const leaderboard = await getOrRefreshScoreboard(activeTournament.id);
-    const projectedCut = await getProjectedCut(activeTournament.id);
 
-    // Refresh cache record for lastUpdated/nextUpdate
-    const freshCache = await db.select().from(apiCacheTable)
-      .where(eq(apiCacheTable.tournamentId, activeTournament.id))
-      .then(r => r[0]);
-
-    // Re-fetch tournament status after potential update
-    const tournament = await db.select().from(tournamentsTable)
-      .where(eq(tournamentsTable.id, activeTournament.id))
-      .then(r => r[0]);
+    const [projectedCut, freshCache, tournament, members, subs, pickRows] = await Promise.all([
+      getProjectedCut(activeTournament.id),
+      db.select().from(apiCacheTable).where(eq(apiCacheTable.tournamentId, activeTournament.id)).then(r => r[0]),
+      // Re-fetch tournament status after the potential ESPN update above
+      db.select().from(tournamentsTable).where(eq(tournamentsTable.id, activeTournament.id)).then(r => r[0]),
+      db.select().from(poolMembersTable).orderBy(poolMembersTable.name),
+      db.select({ poolMemberId: pickSubmissionsTable.poolMemberId })
+        .from(pickSubmissionsTable).where(eq(pickSubmissionsTable.tournamentId, activeTournament.id)),
+      db.select({ poolMemberId: teamPicksTable.poolMemberId })
+        .from(teamPicksTable).where(eq(teamPicksTable.tournamentId, activeTournament.id)),
+    ]);
 
     const lastFetched = freshCache?.lastFetchedAt;
     const intervalMinutes = freshCache?.refreshIntervalMinutes || 5;
@@ -60,12 +61,7 @@ router.get("/scoreboard", async (req, res) => {
       ? Date.now() >= lockAt.getTime()
       : (tournament!.currentRound ?? 0) >= 1 || tournament!.status === "completed";
 
-    const members = await db.select().from(poolMembersTable).orderBy(poolMembersTable.name);
-    const subs = await db.select({ poolMemberId: pickSubmissionsTable.poolMemberId })
-      .from(pickSubmissionsTable).where(eq(pickSubmissionsTable.tournamentId, tournament!.id));
     const submittedSet = new Set(subs.map((s) => s.poolMemberId));
-    const pickRows = await db.select({ poolMemberId: teamPicksTable.poolMemberId })
-      .from(teamPicksTable).where(eq(teamPicksTable.tournamentId, tournament!.id));
     const pickCounts = new Map<string, number>();
     for (const p of pickRows) pickCounts.set(p.poolMemberId, (pickCounts.get(p.poolMemberId) ?? 0) + 1);
     const roster = members.map((m) => ({
