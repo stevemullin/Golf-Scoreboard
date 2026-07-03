@@ -130,6 +130,19 @@ test("members without picks rank below scored members with null totals", () => {
   assert.equal(lb[1]!.toPar, null);
 });
 
+test("tie on team total is broken by lowest single golfer (Conway rule)", () => {
+  // Two teams tied at -12; A's best golfer (-20) beats B's (-15) => A wins outright.
+  const lb = buildLeaderboard({
+    status: "completed",
+    currentRound: 1,
+    members: [{ id: "mB", name: "Curry" }, { id: "mA", name: "Conway" }],
+    allScores: [row("a1", 1, -20), row("a2", 1, 8), row("b1", 1, -15), row("b2", 1, 3)],
+    allPicks: [...picksFor("mA", ["a1", "a2"]), ...picksFor("mB", ["b1", "b2"])],
+  });
+  assert.deepEqual(lb.map((e) => [e.name, e.rank]), [["Conway", 1], ["Curry", 2]]);
+  assert.equal(lb[0]!.bestSingle, -20);
+});
+
 test("ties share a rank and the next rank skips (1,1,3)", () => {
   const lb = buildLeaderboard({
     status: "completed",

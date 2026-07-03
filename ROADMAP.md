@@ -16,17 +16,19 @@ _Last updated: 2026-06-22._
 - **Import past events** — admin tool to backfill completed majors from ESPN's official final scores + pasted picks (ESPN's `?dates=<year>` endpoint; `?event=<id>` doesn't serve historical). Single or **bulk** (`# Major Year` headers). Frozen, viewable via the tournament dropdown.
 - **History page** (`/history`) — all-time standings (titles, win %, avg finish, best score), champions by event, most-picked golfers, best/worst team records.
 
-## 🔜 Next — small, ready to build
+## 🔜 Next
 
-- **Automated daily reminders** — the endpoint exists (`/api/cron/reminders`); just needs the external cron wired (see Ops).
-- **Standings-over-rounds chart** for live events (the History page now has its Title Race chart; a per-round line for the live board is the remaining half).
+Nothing queued — the feature set is complete for the 2026 season. Remaining work
+is the Ops checklist below (chiefly the live dry-run at The Open).
 
-## 🗓 Later — bigger or needs design
+## 🗓 Considered and closed
 
-- **Notify members on re-tier** — email the members whose submitted picks a re-tier invalidated (admin already sees the warnings).
-- **Reminder timezone** — reminder emails show the deadline in ET (hardcoded); make it configurable if the pool runs on another timezone.
-- ~~Season view~~ / ~~SMS reminders~~ — considered and **declined** (2026-06-23).
-- ~~Regenerate the typed API client~~ — superseded by hand-typed `src/lib/api-types.ts`; a full OpenAPI regen is optional.
+- ~~Standings-over-rounds live chart~~ / ~~re-tier notification emails~~ /
+  ~~reminder timezone config~~ — **declined** (2026-06-24, will not do).
+- ~~Season view~~ / ~~SMS reminders~~ — **declined** (2026-06-23).
+- ~~Regenerate the typed API client~~ — superseded by hand-typed `src/lib/api-types.ts`.
+- **Tie-breaker** — ✅ shipped 2026-06-24: lowest single golfer score breaks tied
+  team totals (the "Conway rule", from PGA '24).
 
 ## ⚙️ Ops / setup (not code — your action)
 
