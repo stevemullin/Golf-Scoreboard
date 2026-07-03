@@ -19,7 +19,7 @@ services:
     # best-effort drizzle push for fresh-DB table creation (push stalls on
     # interactive prompts in CI, so it can't be trusted for column changes — hence
     # the explicit migrate step; "|| true" keeps its flakiness from failing builds).
-    buildCommand: npm install -g pnpm@10 && (pnpm install || true) && (pnpm rebuild esbuild || true) && pnpm typecheck && BASE_PATH=/ PORT=8080 pnpm --filter @workspace/golf-pool --filter @workspace/api-server run build && pnpm --filter @workspace/db migrate && (pnpm --filter @workspace/db push-force || true)
+    buildCommand: npm install -g pnpm@10 && (pnpm install || true) && (pnpm rebuild esbuild || true) && pnpm typecheck && BASE_PATH=/ PORT=8080 pnpm --filter @workspace/golf-pool --filter @workspace/api-server run build && pnpm --filter @workspace/db migrate
     startCommand: pnpm --filter @workspace/api-server start
     healthCheckPath: /api/healthz
     envVars:
