@@ -707,6 +707,14 @@ router.post("/admin/refresh", async (req, res) => {
 // GET /admin/picks/:tournamentId/:poolMemberId
 router.get("/admin/picks/:tournamentId/:poolMemberId", async (req, res) => {
   try {
+    // Pick CONTENTS are secret before reveal (fairness) — unlike the other
+    // read-only admin GETs (field/events/tiers, all public-ish data), this one
+    // must be gated or the scoreboard masking could be bypassed via member ids.
+    const password = req.get("x-admin-password") || (typeof req.query.password === "string" ? req.query.password : "");
+    if (!checkPassword(password)) {
+      res.status(401).json({ error: "Invalid password" });
+      return;
+    }
     const { tournamentId, poolMemberId } = req.params;
 
     const picks = await db.select({

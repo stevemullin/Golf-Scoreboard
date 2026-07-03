@@ -8,7 +8,6 @@ import {
   useCreatePoolMember,
   useForceRefresh,
   useGetTournamentField,
-  useGetMemberPicks,
   useSavePicks,
   getGetTournamentFieldQueryKey
 } from "@workspace/api-client-react";
@@ -19,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function Admin() {
   const [password, setPassword] = useState(localStorage.getItem("admin_password") || "");
@@ -82,9 +81,17 @@ export default function Admin() {
     query: { enabled: !!selectedTourneyEspnId } as any,
   });
 
-  const { data: existingPicks, refetch: refetchPicks } = useGetMemberPicks(pickTourneyId, pickMemberId, {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    query: { enabled: !!pickTourneyId && !!pickMemberId } as any,
+  // Manual fetch (not the generated hook) because this endpoint now requires the
+  // admin password via header — pick contents are masked from the public.
+  const { data: existingPicks, refetch: refetchPicks } = useQuery<{ id: string }[]>({
+    queryKey: ["memberPicks", pickTourneyId, pickMemberId],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/picks/${pickTourneyId}/${pickMemberId}`, {
+        headers: { "X-Admin-Password": password },
+      });
+      return r.ok ? r.json() : [];
+    },
+    enabled: !!pickTourneyId && !!pickMemberId && isAuthenticated,
   });
 
   const [selectedGolfers, setSelectedGolfers] = useState<string[]>([]);
