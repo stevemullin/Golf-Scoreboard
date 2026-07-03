@@ -214,7 +214,8 @@ async function importHistoricalEvent(yr: number, major: string, picks: Array<{ m
 
   for (const g of data.golfers) {
     const existing = await db.select().from(golfersTable).where(eq(golfersTable.espnId, g.espnId)).then((r) => r[0]);
-    if (!existing) await db.insert(golfersTable).values({ espnId: g.espnId, name: g.name });
+    if (!existing) await db.insert(golfersTable).values({ espnId: g.espnId, name: g.name, flag: g.flag });
+    else if (!existing.flag && g.flag) await db.update(golfersTable).set({ flag: g.flag }).where(eq(golfersTable.id, existing.id));
   }
   const dbGolfers = await db.select({ id: golfersTable.id, espnId: golfersTable.espnId }).from(golfersTable);
   const espnToId = new Map(dbGolfers.map((g) => [g.espnId, g.id]));

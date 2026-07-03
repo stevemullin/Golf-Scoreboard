@@ -18,18 +18,15 @@ _Last updated: 2026-06-22._
 
 ## 🔜 Next — small, ready to build
 
-- **Country flags** on the scoreboard + pick lists (ESPN `athlete.flag`; needs a `golfers.country` column populated on refresh).
-- **Standings-over-rounds chart** (`recharts` is already a dependency).
-- **Player ESPN profile links** from golfer names (opens ESPN; bio data isn't in the API).
 - **Automated daily reminders** — the endpoint exists (`/api/cron/reminders`); just needs the external cron wired (see Ops).
+- **Standings-over-rounds chart** for live events (the History page now has its Title Race chart; a per-round line for the live board is the remaining half).
 
 ## 🗓 Later — bigger or needs design
 
-- **Season view** — standings across all four majors in a year.
 - **Notify members on re-tier** — email the members whose submitted picks a re-tier invalidated (admin already sees the warnings).
-- **SMS reminders** — only if the cost is acceptable (Twilio ~$0.01/text + ~$1.15/mo number; not free).
-- **Regenerate the typed API client** — several newer response fields (`picksLockAt`, `picksRevealed`, `roster`, `statusDetail`, `holeScores`, …) are read loosely as `any`; regenerate the OpenAPI spec + client for type safety.
 - **Reminder timezone** — reminder emails show the deadline in ET (hardcoded); make it configurable if the pool runs on another timezone.
+- ~~Season view~~ / ~~SMS reminders~~ — considered and **declined** (2026-06-23).
+- ~~Regenerate the typed API client~~ — superseded by hand-typed `src/lib/api-types.ts`; a full OpenAPI regen is optional.
 
 ## ⚙️ Ops / setup (not code — your action)
 

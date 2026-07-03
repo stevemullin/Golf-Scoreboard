@@ -90,9 +90,16 @@ and the built frontend (SPA) for everything else, so the whole app runs as a
     so Gmail won't work) — a no-op without them.
   - Force an ESPN refresh; **download a full JSON backup**.
 - **Champion celebration** — banner + confetti when a tournament goes Final.
-- **History page** (`/history`) — analytics across all completed events: all-time
-  standings (titles, win %, avg finish, best score), champions by event,
-  most-picked golfers, and best/worst team records.
+- **History page** (`/history`) — analytics across all completed events: a
+  cumulative **Title Race chart**, all-time standings (titles, win %, avg finish,
+  best score), champions by event, most-picked golfers, and best/worst records.
+- **Per-major theming** — the scoreboard banner + accent colors switch with the
+  event (Masters green, US Open blue, PGA teal, British Open claret), echoing
+  the pool's original spreadsheets.
+- **Mobile-first leaderboard** — phones get a tap-friendly card list instead of
+  the 9-column table; golfer names link to ESPN profiles and show country flags.
+- **Link recovery** — participants can have their personal pick link re-emailed
+  from the scoreboard footer ("Lost your pick link?"), no admin needed.
 
 ## Data model (Postgres)
 
@@ -132,6 +139,7 @@ PATCH  /api/admin/pool-member/:id         update a member's email
 POST   /api/admin/tournament/:id/lock     set/clear participant pick deadline
 GET    /api/me/:token                     participant's own event + tiers + picks
 POST   /api/me/:token/picks               participant submits/updates own picks
+POST   /api/me/recover                    email a member their pick link
 POST   /api/admin/send-reminders          email non-submitters their link ("Nudge")
 POST   /api/admin/clear-picks             wipe a member's picks for a tournament
 POST   /api/cron/reminders                automated reminders (X-Cron-Secret header)

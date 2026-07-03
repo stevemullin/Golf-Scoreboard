@@ -3,6 +3,8 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
+import { majorTheme } from "@/lib/major-theme";
 
 type Member = {
   name: string; played: number; wins: number; winRate: number;
@@ -26,6 +28,22 @@ export default function HistoryPage() {
       return r.ok ? r.json() : null;
     },
   });
+
+  // Cumulative titles per member across events (oldest → newest) for the chart.
+  const PALETTE = ["#f5c518", "#4f9cf9", "#34d399", "#f87171", "#c084fc", "#fb923c", "#22d3ee", "#a3e635"];
+  const chart = (() => {
+    if (!data || data.totalEvents === 0) return null;
+    const ordered = [...data.events].reverse();
+    const names = data.members.map((m) => m.name);
+    const tally = new Map<string, number>(names.map((n) => [n, 0]));
+    const points = ordered.map((e) => {
+      for (const w of e.winners) tally.set(w, (tally.get(w) ?? 0) + 1);
+      const pt: Record<string, string | number> = { event: e.name };
+      for (const n of names) pt[n] = tally.get(n) ?? 0;
+      return pt;
+    });
+    return { points, names };
+  })();
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground p-4 md:p-8 pb-24 font-sans">
@@ -75,6 +93,33 @@ export default function HistoryPage() {
                   </Card>
                 )}
               </div>
+            )}
+
+            {/* Title race over time */}
+            {chart && chart.points.length > 1 && (
+              <Card className="bg-card border-card-border overflow-hidden rounded-xl shadow-lg">
+                <CardHeader className="bg-black/40 border-b border-border"><CardTitle className="text-xl uppercase tracking-wider text-primary">Title Race</CardTitle></CardHeader>
+                <CardContent className="p-4 pt-6">
+                  <div className="h-64 md:h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chart.points} margin={{ top: 4, right: 12, bottom: 4, left: -24 }}>
+                        <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                        <XAxis dataKey="event" tick={false} axisLine={{ stroke: "rgba(255,255,255,0.15)" }} />
+                        <YAxis allowDecimals={false} tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 12 }} axisLine={false} tickLine={false} />
+                        <Tooltip
+                          contentStyle={{ background: "#101613", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 12 }}
+                          labelStyle={{ color: "rgba(255,255,255,0.7)", fontWeight: 700 }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                        {chart.names.map((n, i) => (
+                          <Line key={n} type="stepAfter" dataKey={n} stroke={PALETTE[i % PALETTE.length]} strokeWidth={2} dot={false} />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">Cumulative titles, every major {data.years[data.years.length - 1]}–{data.years[0]}.</p>
+                </CardContent>
+              </Card>
             )}
 
             {/* All-time standings */}
@@ -128,7 +173,10 @@ export default function HistoryPage() {
                   <TableBody>
                     {data.events.map((e) => (
                       <TableRow key={e.name} className="border-border/30 hover:bg-white/5">
-                        <TableCell className="font-semibold">{e.name}</TableCell>
+                        <TableCell className="font-semibold">
+                          <span className="inline-block w-2.5 h-2.5 rounded-full mr-2 align-middle" style={{ background: majorTheme(e.name).dot }} />
+                          {e.name}
+                        </TableCell>
                         <TableCell className="font-bold text-primary">🏆 {e.winners.join(" / ")}</TableCell>
                         <TableCell className="text-right font-mono">{par(e.winnerScore)}</TableCell>
                         <TableCell className="text-center font-mono text-muted-foreground">{e.field}</TableCell>

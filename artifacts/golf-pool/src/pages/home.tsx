@@ -15,6 +15,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
 import { ChampionBanner, Confetti } from "@/components/champion-celebration";
 import type { ScoreboardResponse } from "@/lib/api-types";
+import { majorTheme } from "@/lib/major-theme";
 
 // "Jun 18–21, 2026" / "Jun 28–Jul 1, 2026" from ESPN ISO dates (golf = US tz).
 function fmtDateRange(s: string | null, e: string | null): string | null {
@@ -97,6 +98,8 @@ export default function Home() {
   const statusDetail = activeTournament?.statusDetail ?? null;
   const broadcasts = activeTournament?.broadcasts ?? null;
   const dateRange = fmtDateRange(activeTournament?.startDate ?? null, activeTournament?.endDate ?? null);
+  // Per-major identity: banner + accent color, echoing the pool's old sheets.
+  const theme = majorTheme(activeTournament?.name);
 
   // Only celebrate a *revealed* champion — never while picks are still masked
   // (a tournament can read "Final" from ESPN before our picks reveal).
@@ -114,15 +117,17 @@ export default function Home() {
   }, [showChampion]);
 
   return (
-    <div className="min-h-[100dvh] bg-background text-foreground p-4 md:p-8 font-sans pb-24">
+    <div className="min-h-[100dvh] bg-background text-foreground p-4 md:p-8 font-sans pb-24" style={{ "--primary": theme.primary } as React.CSSProperties}>
       {showConfetti && <Confetti />}
       <div className="max-w-7xl mx-auto space-y-8">
-        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-border pb-6">
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight text-primary uppercase tracking-wider">
-              {activeTournament?.name || "Golf Pool"}
+        <header className="space-y-4 border-b border-border pb-6">
+          <div className="rounded-xl px-4 py-5 md:py-6 text-center shadow-lg shadow-black/40" style={{ background: theme.banner }}>
+            <h1 className="text-3xl md:text-4xl font-bold uppercase tracking-[0.2em]" style={{ color: theme.bannerText }}>
+              ⛳ {activeTournament?.name || "Golf Pool"}{activeTournament?.year ? ` ${activeTournament.year}` : ""} ⛳
             </h1>
-            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground font-mono">
+          </div>
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4 text-sm text-muted-foreground font-mono flex-wrap">
               <span>{statusDetail || (activeTournament?.status === "completed" ? "Final" : `Round ${activeTournament?.currentRound || 1}`)}</span>
               {dateRange && <span>| {dateRange}</span>}
               {broadcasts && <span>| 📺 {broadcasts}</span>}
@@ -133,8 +138,7 @@ export default function Home() {
                 <span>| Projected cut{cutSize ? ` (Top ${cutSize})` : ""}: {formatScore(projectedCut)}</span>
               )}
             </div>
-          </div>
-          <div className="flex flex-col md:flex-row items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2 md:gap-3">
             {tournaments && tournaments.length > 0 && (
               <select
                 value={viewTourneyId}
@@ -156,12 +160,13 @@ export default function Home() {
               />
               <span className={`text-sm font-bold ${mode === 'manual' ? 'text-primary' : 'text-muted-foreground'}`}>Manual</span>
             </div>
-            <Link href="/history" className="text-sm font-bold text-primary border border-primary/30 px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors uppercase tracking-widest">
+            <Link href="/history" className="text-sm font-bold text-primary border border-primary/30 px-3 py-2 rounded-lg hover:bg-primary/10 transition-colors uppercase tracking-widest">
               History
             </Link>
-            <Link href="/admin" className="text-sm font-bold text-primary border border-primary/30 px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors uppercase tracking-widest">
+            <Link href="/admin" className="text-sm font-bold text-primary border border-primary/30 px-3 py-2 rounded-lg hover:bg-primary/10 transition-colors uppercase tracking-widest">
               Admin
             </Link>
+            </div>
           </div>
         </header>
 
@@ -277,7 +282,7 @@ export default function Home() {
         ) : (
           <main className="space-y-12">
             <Card className="bg-card border-card-border overflow-hidden rounded-xl shadow-xl shadow-black/50">
-              <div className="overflow-x-auto">
+              <div className={mode === "live" ? "overflow-x-auto hidden md:block" : "overflow-x-auto"}>
               <Table>
                 <TableHeader className="bg-black/40">
                   <TableRow className="border-border hover:bg-transparent">
@@ -326,6 +331,29 @@ export default function Home() {
                 </TableBody>
               </Table>
               </div>
+              {mode === "live" && (
+                <div className="md:hidden divide-y divide-border/40">
+                  {scoreboard?.leaderboard?.map((entry) => (
+                    <button
+                      key={entry.poolMemberId}
+                      onClick={() => scrollToTeam(entry.poolMemberId)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/5"
+                    >
+                      <span className="w-7 h-7 shrink-0 rounded-full bg-black/40 border border-border flex items-center justify-center font-mono font-bold text-sm">{entry.rank}</span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block font-bold truncate">{entry.name}</span>
+                        <span className="block text-xs text-muted-foreground font-mono">thru {entry.thru} · today {formatScore(entry.today)}</span>
+                      </span>
+                      <span className={`font-mono font-bold text-xl shrink-0 ${entry.toPar != null && entry.toPar < 0 ? "text-primary" : "text-muted-foreground"}`}>
+                        {formatScore(entry.toPar)}
+                      </span>
+                    </button>
+                  ))}
+                  {(scoreboard?.leaderboard?.length ?? 0) === 0 && (
+                    <div className="px-4 py-6 text-center text-muted-foreground text-sm">No teams yet.</div>
+                  )}
+                </div>
+              )}
               {mode === "manual" && (
                 <div className="p-4 bg-black/20 border-t border-border flex items-center justify-between">
                    <div className="flex items-center gap-2">
@@ -357,6 +385,8 @@ export default function Home() {
                     const golferMap = new Map<string, {
                       golferId: string;
                       golferName: string;
+                      golferFlag: string | null;
+                      golferEspnId: string | null;
                       isCut: boolean; isWd: boolean; isDq: boolean;
                       teeTime: string | null;
                       roundScores: (number | null)[];
@@ -373,6 +403,8 @@ export default function Home() {
                           golferMap.set(g.golferId, {
                             golferId: g.golferId,
                             golferName: g.golferName,
+                            golferFlag: g.golferFlag ?? null,
+                            golferEspnId: g.golferEspnId ?? null,
                             isCut: false, isWd: false, isDq: false,
                             teeTime: null,
                             roundScores: [null, null, null, null],
@@ -448,7 +480,20 @@ export default function Home() {
                                     <TableRow className={`border-border/20 hover:bg-white/5 ${isDropped ? 'opacity-40' : ''}`}>
                                       <TableCell className="font-semibold">
                                         <div className="flex items-center gap-1.5 flex-wrap">
-                                          <span>{golfer.golferName}</span>
+                                          {golfer.golferFlag && <img src={golfer.golferFlag} alt="" className="w-4 h-3 rounded-[2px] object-cover shrink-0" loading="lazy" />}
+                                          {golfer.golferEspnId ? (
+                                            <a
+                                              href={`https://www.espn.com/golf/player/_/id/${golfer.golferEspnId}`}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="hover:text-primary hover:underline underline-offset-2"
+                                            >
+                                              {golfer.golferName}
+                                            </a>
+                                          ) : (
+                                            <span>{golfer.golferName}</span>
+                                          )}
                                           {golfer.isCut && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">CUT</Badge>}
                                           {golfer.isWd && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">WD</Badge>}
                                           {golfer.isDq && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">DQ</Badge>}
@@ -493,6 +538,11 @@ export default function Home() {
             )}
           </main>
         )}
+        <footer className="pt-8 text-center">
+          <Link href="/me/lost" className="text-xs text-muted-foreground hover:text-primary underline underline-offset-4">
+            Lost your pick link? Get it emailed to you
+          </Link>
+        </footer>
       </div>
     </div>
   );
