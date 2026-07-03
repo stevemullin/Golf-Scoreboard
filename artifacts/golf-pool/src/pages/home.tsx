@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
 import { ChampionBanner, Confetti } from "@/components/champion-celebration";
+import type { ScoreboardResponse } from "@/lib/api-types";
 
 // "Jun 18–21, 2026" / "Jun 28–Jul 1, 2026" from ESPN ISO dates (golf = US tz).
 function fmtDateRange(s: string | null, e: string | null): string | null {
@@ -39,7 +40,7 @@ export default function Home() {
 
   const [viewTourneyId, setViewTourneyId] = useState("");
   const { data: tournaments } = useGetTournaments();
-  const { data: scoreboard, isLoading } = useQuery({
+  const { data: scoreboard, isLoading } = useQuery<ScoreboardResponse | null>({
     queryKey: ["scoreboard", viewTourneyId],
     queryFn: async () => {
       const res = await fetch(`/api/scoreboard${viewTourneyId ? `?tournamentId=${viewTourneyId}` : ""}`);
@@ -85,24 +86,17 @@ export default function Home() {
 
   const activeTournament = scoreboard?.tournament;
   const isFinal = activeTournament?.status === "completed";
-  const champions = ((scoreboard?.leaderboard ?? []) as any[]).filter((e: any) => e.rank === 1);
-  // projectedCut / cutSize aren't in the generated client type yet, so read loosely.
-  const projectedCut =
-    (scoreboard as unknown as { projectedCut?: number | null } | undefined)?.projectedCut ?? null;
-  const cutSize =
-    (scoreboard?.tournament as unknown as { cutSize?: number | null } | undefined)?.cutSize ?? null;
+  const champions = (scoreboard?.leaderboard ?? []).filter((e) => e.rank === 1);
+  const projectedCut = scoreboard?.projectedCut ?? null;
+  const cutSize = activeTournament?.cutSize ?? null;
   // Self-service masking: before reveal the server sends no picks, only a roster.
-  const picksRevealed =
-    (scoreboard as unknown as { picksRevealed?: boolean } | undefined)?.picksRevealed ?? true;
-  const roster =
-    (scoreboard as unknown as { roster?: { poolMemberId: string; name: string; submitted: boolean; pickCount: number }[] } | undefined)?.roster ?? [];
-  const picksLockAt =
-    (scoreboard?.tournament as unknown as { picksLockAt?: string | null } | undefined)?.picksLockAt ?? null;
+  const picksRevealed = scoreboard?.picksRevealed ?? true;
+  const roster = scoreboard?.roster ?? [];
+  const picksLockAt = activeTournament?.picksLockAt ?? null;
   // Richer event header (ESPN metadata).
-  const tMeta = scoreboard?.tournament as unknown as { statusDetail?: string | null; startDate?: string | null; endDate?: string | null; broadcasts?: string | null } | undefined;
-  const statusDetail = tMeta?.statusDetail ?? null;
-  const broadcasts = tMeta?.broadcasts ?? null;
-  const dateRange = fmtDateRange(tMeta?.startDate ?? null, tMeta?.endDate ?? null);
+  const statusDetail = activeTournament?.statusDetail ?? null;
+  const broadcasts = activeTournament?.broadcasts ?? null;
+  const dateRange = fmtDateRange(activeTournament?.startDate ?? null, activeTournament?.endDate ?? null);
 
   // Only celebrate a *revealed* champion — never while picks are still masked
   // (a tournament can read "Final" from ESPN before our picks reveal).
@@ -172,7 +166,7 @@ export default function Home() {
         </header>
 
         {showChampion && (
-          <ChampionBanner names={champions.map((c: any) => c.name)} toPar={champions[0].toPar ?? null} />
+          <ChampionBanner names={champions.map((c) => c.name)} toPar={champions[0].toPar ?? null} />
         )}
 
         {!isLoading && !scoreboard ? (
@@ -300,7 +294,7 @@ export default function Home() {
                 </TableHeader>
                 <TableBody>
                   {mode === "live" ? (
-                    scoreboard?.leaderboard?.map((entry: any) => (
+                    scoreboard?.leaderboard?.map((entry) => (
                       <TableRow
                         key={entry.poolMemberId} 
                         className="border-border hover:bg-white/5 cursor-pointer transition-colors"
@@ -356,7 +350,7 @@ export default function Home() {
                   </button>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {scoreboard?.leaderboard?.map((entry: any) => {
+                  {scoreboard?.leaderboard?.map((entry) => {
                     const currentRound = scoreboard.tournament.currentRound || 1;
 
                     // Aggregate per-golfer data across all rounds
@@ -394,7 +388,7 @@ export default function Home() {
                         agg.roundScores[idx] = g.scoreToPar ?? null;
                         agg.roundCounted[idx] = g.counted ?? null;
                         agg.roundIsPenalty[idx] = g.isPenalty;
-                        agg.roundHoles[idx] = (g as unknown as { holeScores?: string | null }).holeScores ?? null;
+                        agg.roundHoles[idx] = g.holeScores ?? null;
                         if (g.isCut) agg.isCut = true;
                         if (g.isWd) agg.isWd = true;
                         if (g.isDq) agg.isDq = true;
