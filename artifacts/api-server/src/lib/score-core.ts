@@ -29,6 +29,9 @@ export interface LeaderboardEntry {
   poolMemberId: string;
   name: string;
   toPar: number | null;
+  // Tie-break: the team's lowest single-golfer tournament total (pool rule —
+  // tied team totals are broken by whoever holds the best individual golfer).
+  bestSingle: number | null;
   thru: string;
   today: number | null;
   r1: number | null;
@@ -137,6 +140,7 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardEntry[] {
         poolMemberId: member.id,
         name: member.name,
         toPar: null,
+        bestSingle: null,
         thru: "-",
         today: null,
         r1: null, r2: null, r3: null, r4: null,
@@ -298,12 +302,14 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardEntry[] {
 
     const todayScore = rounds.find(r => r.roundNumber === currentRound)?.score ?? null;
     const thru = calculateMemberThru(rounds, currentRound);
+    const bestSingle = golferList.length ? Math.min(...golferList.map(g => g.tournamentTotal)) : null;
 
     entries.push({
       rank: 0,
       poolMemberId: member.id,
       name: member.name,
       toPar: teamScore,
+      bestSingle,
       thru,
       today: todayScore,
       r1: rounds[0]?.score ?? null,
@@ -314,18 +320,19 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardEntry[] {
     });
   }
 
-  // Sort by toPar ascending, nulls last
+  // Sort by toPar ascending (nulls last), ties broken by best single golfer
   entries.sort((a, b) => {
     if (a.toPar === null && b.toPar === null) return 0;
     if (a.toPar === null) return 1;
     if (b.toPar === null) return -1;
-    return a.toPar - b.toPar;
+    if (a.toPar !== b.toPar) return a.toPar - b.toPar;
+    return (a.bestSingle ?? 0) - (b.bestSingle ?? 0);
   });
 
-  // Assign ranks with tie handling
+  // Assign ranks; teams share a rank only if tied on total AND tie-break
   let rank = 1;
   for (let i = 0; i < entries.length; i++) {
-    if (i > 0 && entries[i]!.toPar !== entries[i - 1]!.toPar) {
+    if (i > 0 && (entries[i]!.toPar !== entries[i - 1]!.toPar || entries[i]!.bestSingle !== entries[i - 1]!.bestSingle)) {
       rank = i + 1;
     }
     entries[i]!.rank = rank;

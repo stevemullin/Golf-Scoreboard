@@ -46,6 +46,7 @@ export interface LeaderboardEntry {
   poolMemberId: string;
   name: string;
   toPar: number | null;
+  bestSingle?: number | null;
   thru: string;
   today: number | null;
   r1: number | null;

@@ -12,6 +12,9 @@ time. Built as a small pnpm monorepo and hosted for free.
 - Each member picks **6 golfers**.
 - A team's score is the sum of its **best 4** golfers' tournament totals (the
   worst 2 are dropped). Lowest total wins, golf-style (`E`, `+5`, `-3`).
+- **Tie-break:** tied team totals are broken by the **lowest single golfer
+  score** on each team (e.g. PGA '24: both -52, but Bryson's -20 beat
+  Morikawa's -15 — Conway wins). Still tied after that = co-champions.
 - Golfers who **miss the cut / WD / DQ** are penalized for each round they don't
   play — the penalty is the **worst score posted that round** by the field
   (applied to R3 *and* R4 once the cut is made).

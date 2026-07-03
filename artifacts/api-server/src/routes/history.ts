@@ -36,11 +36,8 @@ router.get("/history", async (req, res) => {
       if (players.length === 0) continue;
       const label = `${t.name} ${t.year}`;
 
-      // Tie-aware finish: 1 + number of players strictly better.
-      const withFinish = players.map((e) => ({
-        ...e,
-        finish: 1 + players.filter((o) => (o.toPar as number) < (e.toPar as number)).length,
-      }));
+      // Finish = the engine's rank (includes the best-single-golfer tie-break).
+      const withFinish = players.map((e) => ({ ...e, finish: e.rank }));
       const winners = withFinish.filter((e) => e.finish === 1);
       const winnerScore = winners[0]?.toPar ?? null;
       events.push({ name: label, year: t.year, winners: winners.map((w) => w.name), winnerScore, field: players.length });
