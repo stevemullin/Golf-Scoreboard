@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-type Tier = { golferId: string; name: string; tier: number; odds: number | null };
+type Tier = { golferId: string; name: string; tier: number; odds: number | null; flag?: string | null };
 type MeData = {
   member: { id: string; name: string };
   tournament: { id: string; name: string; year: number; picksLockAt: string | null; locked: boolean } | null;
@@ -43,6 +43,21 @@ export default function Me() {
   const [error, setError] = useState(false);
   const [slots, setSlots] = useState<{ [k: string]: string }>({ t1: "", t2: "", t3: "", t4: "", t5: "", extra: "" });
   const [saving, setSaving] = useState(false);
+  const [recoverEmail, setRecoverEmail] = useState("");
+  const [recovering, setRecovering] = useState(false);
+
+  const recoverLink = () => {
+    if (!recoverEmail.trim()) return;
+    setRecovering(true);
+    fetch("/api/me/recover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: recoverEmail.trim() }),
+    })
+      .then(() => toast({ title: "Check your inbox", description: "If that email is on file, your pick link is on its way." }))
+      .catch(() => toast({ title: "Could not reach server", variant: "destructive" }))
+      .finally(() => setRecovering(false));
+  };
 
   const load = () => {
     setLoading(true);
@@ -111,8 +126,24 @@ export default function Me() {
     return (
       <Shell>
         <Card className="bg-card border-card-border">
-          <CardHeader><CardTitle className="text-xl uppercase tracking-wider text-primary">Invalid link</CardTitle></CardHeader>
-          <CardContent><p className="text-muted-foreground">This pick link isn't valid. Ask the pool admin for your personal link.</p></CardContent>
+          <CardHeader><CardTitle className="text-xl uppercase tracking-wider text-primary">Find your pick link</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground">This link isn't valid — but if your email is on file, we can send you your personal one.</p>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                value={recoverEmail}
+                onChange={(e) => setRecoverEmail(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") recoverLink(); }}
+                placeholder="you@example.com"
+                className="flex-1 bg-input border border-border rounded-md px-3 py-2 text-sm"
+              />
+              <Button onClick={recoverLink} disabled={recovering || !recoverEmail.trim()} className="uppercase font-bold tracking-wider">
+                {recovering ? "Sending…" : "Email me"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Or ask the pool admin to copy your link from the Members list.</p>
+          </CardContent>
         </Card>
       </Shell>
     );
@@ -175,7 +206,12 @@ export default function Me() {
                   <SelectTrigger className="flex-1"><SelectValue placeholder={`Pick ${label}`} /></SelectTrigger>
                   <SelectContent>
                     {slotOptions(slotTiers, key).map((g) => (
-                      <SelectItem key={g.golferId} value={g.golferId}>{g.name}{oddsLabel(g.odds)}</SelectItem>
+                      <SelectItem key={g.golferId} value={g.golferId}>
+                        <span className="inline-flex items-center gap-2">
+                          {g.flag && <img src={g.flag} alt="" className="w-4 h-3 rounded-[2px] object-cover" loading="lazy" />}
+                          {g.name}{oddsLabel(g.odds)}
+                        </span>
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

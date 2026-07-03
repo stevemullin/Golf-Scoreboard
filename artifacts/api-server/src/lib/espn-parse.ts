@@ -15,6 +15,7 @@ export interface ESPNRoundScore {
 export interface ESPNGolferData {
   espnId: string;
   name: string;
+  flag: string | null; // country flag image URL from ESPN
   scores: ESPNRoundScore[];
   currentRound: number;
 }
@@ -68,6 +69,7 @@ export function parseEvent(event: any): { golfers: ESPNGolferData[]; eventStatus
   for (const competitor of (competition.competitors || [])) {
     const espnId = competitor.id;
     const name = competitor.athlete?.displayName || competitor.athlete?.fullName || "Unknown";
+    const flag = competitor.athlete?.flag?.href ?? null;
     const scores: ESPNRoundScore[] = [];
 
     // Determine cut/out status at the golfer level. Once the field reaches
@@ -143,7 +145,7 @@ export function parseEvent(event: any): { golfers: ESPNGolferData[]; eventStatus
       }
     }
 
-    golfers.push({ espnId, name, scores, currentRound: maxRound });
+    golfers.push({ espnId, name, flag, scores, currentRound: maxRound });
   }
 
   return { golfers, eventStatus };

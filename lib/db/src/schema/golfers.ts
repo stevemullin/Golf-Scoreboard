@@ -6,6 +6,7 @@ export const golfersTable = pgTable("golfers", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   espnId: text("espn_id").unique(),
   name: text("name").notNull(),
+  flag: text("flag"), // country flag image URL (from ESPN)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

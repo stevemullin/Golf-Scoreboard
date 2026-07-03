@@ -5,6 +5,8 @@
 export interface GolferRoundDetail {
   golferId: string;
   golferName: string;
+  golferEspnId?: string | null;
+  golferFlag?: string | null;
   scoreToPar: number | null;
   holesCompleted: number;
   isCut: boolean;
@@ -52,6 +54,8 @@ export interface PickRow {
   poolMemberId: string;
   golferId: string;
   golferName: string;
+  golferEspnId?: string | null;
+  golferFlag?: string | null;
 }
 
 export interface MemberRow {
@@ -116,10 +120,10 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardEntry[] {
   }
 
   // Group picks by member for O(1) lookup
-  const picksByMember = new Map<string, Array<{ golferId: string; golferName: string }>>();
+  const picksByMember = new Map<string, Array<{ golferId: string; golferName: string; golferEspnId: string | null; golferFlag: string | null }>>();
   for (const pick of allPicks) {
     if (!picksByMember.has(pick.poolMemberId)) picksByMember.set(pick.poolMemberId, []);
-    picksByMember.get(pick.poolMemberId)!.push({ golferId: pick.golferId, golferName: pick.golferName });
+    picksByMember.get(pick.poolMemberId)!.push({ golferId: pick.golferId, golferName: pick.golferName, golferEspnId: pick.golferEspnId ?? null, golferFlag: pick.golferFlag ?? null });
   }
 
   const entries: LeaderboardEntry[] = [];
@@ -145,6 +149,8 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardEntry[] {
     interface GolferWithTotal {
       golferId: string;
       golferName: string;
+      golferEspnId: string | null;
+      golferFlag: string | null;
       isCut: boolean;
       isWd: boolean;
       isDq: boolean;
@@ -230,6 +236,8 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardEntry[] {
       return {
         golferId: pick.golferId,
         golferName: pick.golferName,
+        golferEspnId: pick.golferEspnId,
+        golferFlag: pick.golferFlag,
         isCut,
         isWd,
         isDq,
@@ -264,6 +272,8 @@ export function buildLeaderboard(input: LeaderboardInput): LeaderboardEntry[] {
         return {
           golferId: g.golferId,
           golferName: g.golferName,
+          golferEspnId: g.golferEspnId,
+          golferFlag: g.golferFlag,
           scoreToPar: rd.scoreToPar,
           holesCompleted: rd.holesCompleted,
           isCut: g.isCut,

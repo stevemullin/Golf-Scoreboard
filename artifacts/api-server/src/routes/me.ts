@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { validateTieredPicks } from "../lib/tier-rules";
+import { sendEmail } from "../lib/email";
 
 const router = Router();
 
@@ -39,7 +40,7 @@ router.get("/me/:token", async (req, res) => {
     const locked = !!lockAt && Date.now() >= lockAt.getTime();
 
     const tiers = await db
-      .select({ golferId: golferTiersTable.golferId, name: golfersTable.name, tier: golferTiersTable.tier, odds: golferTiersTable.odds })
+      .select({ golferId: golferTiersTable.golferId, name: golfersTable.name, tier: golferTiersTable.tier, odds: golferTiersTable.odds, flag: golfersTable.flag })
       .from(golferTiersTable)
       .innerJoin(golfersTable, eq(golferTiersTable.golferId, golfersTable.id))
       .where(eq(golferTiersTable.tournamentId, tournament.id));
@@ -123,6 +124,33 @@ router.post("/me/:token/picks", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to save participant picks");
     res.status(500).json({ error: "Failed to save picks" });
+  }
+});
+
+// POST /me/recover - "email me my pick link". No auth by design (trusted pool):
+// takes an email, silently sends that member their personal link if it matches.
+// Response is intentionally generic either way. Covered by the /api/me limiter.
+router.post("/me/recover", async (req, res) => {
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (email) {
+      const members = await db.select().from(poolMembersTable);
+      const member = members.find((m) => (m.email || "").trim().toLowerCase() === email);
+      if (member?.email) {
+        const base = (process.env["APP_URL"] || "https://golf-scoreboard-hk3w.onrender.com").replace(/\/$/, "");
+        const link = `${base}/me/${member.accessToken}`;
+        await sendEmail({
+          to: member.email,
+          subject: "Your Golf Pool pick link",
+          text: `Hi ${member.name},\n\nHere's your personal pick link:\n${link}\n\nKeep it handy — it's how you make and edit your picks.`,
+          html: `<p>Hi ${member.name},</p><p>Here's your personal pick link:</p><p><a href="${link}">${link}</a></p><p>Keep it handy — it's how you make and edit your picks.</p>`,
+        });
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Link recovery failed");
+    res.json({ ok: true }); // still generic
   }
 });
 

@@ -22,6 +22,8 @@ export interface TournamentInfo {
 export interface GolferRoundDetail {
   golferId: string;
   golferName: string;
+  golferEspnId?: string | null;
+  golferFlag?: string | null;
   scoreToPar: number | null;
   holesCompleted: number;
   isCut: boolean;

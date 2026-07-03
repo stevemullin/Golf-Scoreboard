@@ -74,13 +74,14 @@ export async function refreshFromESPN(tournamentId: string): Promise<void> {
 
   // ── Batch upsert golfers ──────────────────────────────────────────────────
   // One round-trip for all golfers instead of a select+insert/update per golfer.
-  const golferValues = golfers.map(g => ({ espnId: g.espnId, name: g.name }));
+  const golferValues = golfers.map(g => ({ espnId: g.espnId, name: g.name, flag: g.flag }));
   if (golferValues.length > 0) {
     await db.insert(golfersTable)
       .values(golferValues)
       .onConflictDoUpdate({
         target: golfersTable.espnId,
-        set: { name: sql`excluded.name` },
+        // COALESCE keeps an existing flag when a source omits it
+        set: { name: sql`excluded.name`, flag: sql`COALESCE(excluded.flag, golfers.flag)` },
       });
   }
 
@@ -218,6 +219,8 @@ export async function calculateScoreboard(tournamentId: string): Promise<Leaderb
       poolMemberId: teamPicksTable.poolMemberId,
       golferId: teamPicksTable.golferId,
       golferName: golfersTable.name,
+      golferEspnId: golfersTable.espnId,
+      golferFlag: golfersTable.flag,
     })
       .from(teamPicksTable)
       .innerJoin(golfersTable, eq(teamPicksTable.golferId, golfersTable.id))
