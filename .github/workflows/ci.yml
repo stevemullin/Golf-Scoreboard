@@ -31,5 +31,10 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # Pure-logic unit tests (scoring engine, ESPN parsing, tier rules) run via
+      # node --test with native TypeScript type-stripping - no build step needed.
+      - name: Test
+        run: pnpm --filter @workspace/api-server test
+
       - name: Build
         run: BASE_PATH=/ PORT=8080 pnpm --filter @workspace/golf-pool --filter @workspace/api-server run build
