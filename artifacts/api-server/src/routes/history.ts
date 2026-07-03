@@ -3,12 +3,20 @@ import { db } from "@workspace/db";
 import { tournamentsTable, teamPicksTable, golfersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { calculateScoreboard } from "../lib/scoring";
+import { getHistoryCache, setHistoryCache } from "../lib/history-cache";
 
 const router = Router();
 
 // GET /history - aggregate analytics across all completed tournaments.
+// Recomputing a full scoreboard per event costs 3-7s, so the result is cached
+// and busted whenever an import/pick-edit/rename/delete touches the inputs.
 router.get("/history", async (req, res) => {
   try {
+    const cachedPayload = getHistoryCache();
+    if (cachedPayload) {
+      res.json(cachedPayload);
+      return;
+    }
     const all = await db.select().from(tournamentsTable);
     // Completed events, newest first (ESPN ids are incremental ~ chronological).
     const completed = all
@@ -77,14 +85,16 @@ router.get("/history", async (req, res) => {
       .sort((a, b) => b.count - a.count)
       .slice(0, 15);
 
-    res.json({
+    const payload = {
       totalEvents: events.length,
       years: [...new Set(completed.map((t) => t.year))].sort((a, b) => b - a),
       members,
       events,
       topGolfers,
       records: { bestRound, worstRound },
-    });
+    };
+    setHistoryCache(payload);
+    res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Failed to build history");
     res.status(500).json({ error: "Failed to build history" });

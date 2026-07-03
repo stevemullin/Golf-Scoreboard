@@ -17,6 +17,7 @@ import { refreshFromESPN } from "../lib/scoring";
 import { majorSportKey, fetchMajorOdds, normalizeName } from "../lib/odds";
 import { validateTieredPicks } from "../lib/tier-rules";
 import { sendPickReminders } from "../lib/reminders";
+import { bustHistoryCache } from "../lib/history-cache";
 
 const router = Router();
 
@@ -136,6 +137,7 @@ router.patch("/admin/tournament/:tournamentId", async (req, res) => {
       res.status(404).json({ error: "Tournament not found" });
       return;
     }
+    bustHistoryCache(); // event names appear in history labels
 
     // Only when the ESPN ID changed: re-fetch the field + force a fresh sync.
     if (updates.espnEventId) {
@@ -280,6 +282,7 @@ async function importHistoricalEvent(yr: number, major: string, picks: Array<{ m
     members.push({ name: memberName, matched: matchedIds.length, unmatched });
   }
 
+  bustHistoryCache();
   return { ok: true, tournamentId, name: `${cleanName} ${yr}`, year: yr, golfers: data.golfers.length, members };
 }
 
@@ -340,6 +343,7 @@ router.delete("/admin/tournament/:tournamentId", async (req, res) => {
     await db.delete(manualScoresTable).where(eq(manualScoresTable.tournamentId, tournamentId));
     await db.delete(apiCacheTable).where(eq(apiCacheTable.tournamentId, tournamentId));
     await db.delete(tournamentsTable).where(eq(tournamentsTable.id, tournamentId));
+    bustHistoryCache();
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Failed to delete tournament");
@@ -439,6 +443,7 @@ router.patch("/admin/pool-member/:id", async (req, res) => {
       res.status(404).json({ error: "Member not found" });
       return;
     }
+    bustHistoryCache(); // member names appear in history standings
     res.json({ id: member.id, name: member.name, email: member.email, accessToken: member.accessToken });
   } catch (err) {
     req.log.error({ err }, "Failed to update pool member");
@@ -520,6 +525,7 @@ router.post("/admin/clear-picks", async (req, res) => {
       eq(pickSubmissionsTable.tournamentId, tournamentId),
       eq(pickSubmissionsTable.poolMemberId, poolMemberId),
     ));
+    bustHistoryCache();
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Failed to clear picks");
@@ -605,6 +611,7 @@ router.post("/admin/picks", async (req, res) => {
       });
     }
 
+    bustHistoryCache();
     res.json({ success: true, message: "Picks saved successfully" });
   } catch (err) {
     req.log.error({ err }, "Failed to save picks");

@@ -11,6 +11,7 @@ import {
 import { eq, and, isNotNull, desc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { fetchESPNScoreboard, fetchESPNHistoricalEvent } from "./espn";
+import { bustHistoryCache } from "./history-cache";
 import { logger } from "./logger";
 
 export interface GolferRoundDetail {
@@ -130,6 +131,7 @@ export async function refreshFromESPN(tournamentId: string): Promise<void> {
       broadcasts: hist.eventStatus.broadcasts.length ? hist.eventStatus.broadcasts.join(", ") : tournament.broadcasts,
       statusDetail: hist.eventStatus.statusDetail ?? "Final",
     }).where(eq(tournamentsTable.id, tournamentId));
+    if (done && tournament.status !== "completed") bustHistoryCache(); // newly-final event enters history
     logger.info({ tournamentId }, "Event aged out of ?event=; finalized from season data");
     return;
   }
@@ -220,6 +222,9 @@ export async function refreshFromESPN(tournamentId: string): Promise<void> {
     broadcasts: eventStatus.broadcasts.length ? eventStatus.broadcasts.join(", ") : tournament.broadcasts,
     statusDetail: eventStatus.statusDetail ?? tournament.statusDetail,
   }).where(eq(tournamentsTable.id, tournamentId));
+  if (newStatus === "completed" && tournament.status !== "completed") {
+    bustHistoryCache(); // the just-finished event now belongs in history
+  }
 
   // Final timestamp update to reflect when the full refresh completed
   await db.update(apiCacheTable).set({ lastFetchedAt: new Date() }).where(eq(apiCacheTable.tournamentId, tournamentId));
