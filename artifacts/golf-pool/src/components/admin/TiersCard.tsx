@@ -79,6 +79,7 @@ export function TiersCard({ password, onAuthFail, tournaments }: { password: str
         toast({ title: "No odds posted for this event", description: "A major is only priced from ~3 weeks before until it ends. Right now just the upcoming major (The Open) has odds.", variant: "destructive" });
       } else {
         toast({ title: "Tiers built from odds", description: `${data.matched.length} matched · ${data.unmatched.length} unmatched (T5)` });
+        if (data.note) toast({ title: "Heads up", description: data.note });
       }
     } catch {
       toast({ title: "Could not reach server", variant: "destructive" });

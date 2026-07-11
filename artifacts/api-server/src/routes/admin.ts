@@ -800,6 +800,27 @@ router.post("/admin/tiers/suggest", async (req, res) => {
       });
       return;
     }
+    // Ensure every field golfer has a DB row — the tournament may have been
+    // created weeks ago against a stale/wrong field, so matching only against
+    // already-inserted golfers silently drops newcomers (how Justin Rose went
+    // missing). Chunked upsert keyed on espn_id.
+    const CHUNK = 100;
+    for (let i = 0; i < field.length; i += CHUNK) {
+      const chunk = field.slice(i, i + CHUNK).map((f) => ({ espnId: f.espnId, name: f.name }));
+      if (chunk.length) {
+        await db.insert(golfersTable).values(chunk).onConflictDoUpdate({
+          target: golfersTable.espnId,
+          set: { name: sql`excluded.name` },
+        });
+      }
+    }
+
+    // A "field" much larger than a real major field (~156) is ESPN's full
+    // entry/qualifying list, published before the final field. Tier only the
+    // priced players in that case so T4/T5 dropdowns don't fill with
+    // non-qualifiers; the admin rebuilds once the real field posts.
+    const isEntryList = field.length > 250;
+
     const espnIds = field.map((f) => f.espnId);
     const dbGolfers = espnIds.length
       ? await db.select({ id: golfersTable.id, name: golfersTable.name }).from(golfersTable).where(inArray(golfersTable.espnId, espnIds))
@@ -856,7 +877,17 @@ router.post("/admin/tiers/suggest", async (req, res) => {
       .map((g) => g.index)
       .sort((a, b) => a - b);
 
-    res.json({ sportKey, matched, unmatched, suggestedBreaks });
+    res.json({
+      sportKey,
+      matched,
+      // Entry-list mode: withhold the hundreds of unpriced entrants so T5 (and
+      // the pick dropdowns) only contain plausible players.
+      unmatched: isEntryList ? [] : unmatched,
+      suggestedBreaks,
+      note: isEntryList
+        ? `ESPN currently lists the full entry list (${field.length} players) — tiers were built from the ${matched.length} priced players only. Rebuild once the final field posts (Monday of tournament week) for full coverage.`
+        : null,
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to suggest tiers");
     res.status(500).json({ error: "Failed to suggest tiers" });
