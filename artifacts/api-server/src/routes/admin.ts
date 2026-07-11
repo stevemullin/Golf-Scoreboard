@@ -80,7 +80,7 @@ router.post("/admin/tournament", async (req, res) => {
 
     // Fetch field from ESPN to populate golfers
     try {
-      const field = await fetchESPNField(espnEventId);
+      const field = await fetchESPNField(espnEventId, Number(year) || undefined);
       for (const golfer of field) {
         const existing = await db.select().from(golfersTable).where(eq(golfersTable.espnId, golfer.espnId)).then(r => r[0]);
         if (!existing) {
@@ -142,7 +142,7 @@ router.patch("/admin/tournament/:tournamentId", async (req, res) => {
     // Only when the ESPN ID changed: re-fetch the field + force a fresh sync.
     if (updates.espnEventId) {
       try {
-        const field = await fetchESPNField(updates.espnEventId);
+        const field = await fetchESPNField(updates.espnEventId, tournament.year);
         for (const golfer of field) {
           const existing = await db.select().from(golfersTable).where(eq(golfersTable.espnId, golfer.espnId)).then(r => r[0]);
           if (!existing) {
@@ -793,7 +793,13 @@ router.post("/admin/tiers/suggest", async (req, res) => {
       return;
     }
 
-    const field = await fetchESPNField(tournament.espnEventId);
+    const field = await fetchESPNField(tournament.espnEventId, tournament.year);
+    if (field.length === 0) {
+      res.status(400).json({
+        error: "ESPN hasn't published this event's field yet — it usually appears the Monday of tournament week. Odds are ready; rebuild tiers once the field is up.",
+      });
+      return;
+    }
     const espnIds = field.map((f) => f.espnId);
     const dbGolfers = espnIds.length
       ? await db.select({ id: golfersTable.id, name: golfersTable.name }).from(golfersTable).where(inArray(golfersTable.espnId, espnIds))

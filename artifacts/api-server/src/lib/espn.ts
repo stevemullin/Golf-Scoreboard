@@ -90,7 +90,7 @@ export async function fetchESPNHistoricalEvent(year: number, nameQuery: string, 
   }
 }
 
-export async function fetchESPNField(espnEventId: string): Promise<ESPNGolfer[]> {
+export async function fetchESPNField(espnEventId: string, year?: number): Promise<ESPNGolfer[]> {
   try {
     const url = `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?event=${espnEventId}`;
     const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
@@ -98,14 +98,29 @@ export async function fetchESPNField(espnEventId: string): Promise<ESPNGolfer[]>
 
     const data = await response.json() as any;
 
-    // Find the matching event
-    let event = data.events?.[0];
-    if (espnEventId) {
-      const found = data.events?.find((e: { id: string }) => e.id === espnEventId);
-      if (found) event = found;
+    // STRICT: only ever use the requested event. ESPN returns the *current*
+    // week's events when the id isn't in its window — using events[0] here once
+    // built tiers for The Open against the Scottish Open's field.
+    let event = data.events?.find((e: { id: string }) => e.id === espnEventId);
+    if (!event) {
+      // Not in the current window (future or past event) — look it up by id in
+      // the season feed instead. Its field may legitimately be empty until
+      // ESPN publishes entrants (usually the Monday of tournament week).
+      const y = year ?? new Date().getFullYear();
+      const seasonRes = await fetch(
+        `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${y}`,
+        { signal: AbortSignal.timeout(20000) },
+      );
+      if (seasonRes.ok) {
+        const season = await seasonRes.json() as any;
+        event = season.events?.find((e: { id: string }) => e.id === espnEventId);
+      }
     }
 
-    if (!event) return [];
+    if (!event) {
+      logger.warn({ espnEventId, year }, "Field: event not found in window or season feed");
+      return [];
+    }
     const competition = event.competitions?.[0];
     if (!competition) return [];
 
