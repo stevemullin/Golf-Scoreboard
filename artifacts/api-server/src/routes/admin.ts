@@ -794,37 +794,43 @@ router.post("/admin/tiers/suggest", async (req, res) => {
     }
 
     const field = await fetchESPNField(tournament.espnEventId, tournament.year);
-    if (field.length === 0) {
-      res.status(400).json({
-        error: "ESPN hasn't published this event's field yet (or its cache is lagging) — it usually appears the Monday of tournament week. Wait a minute and press Build from odds again.",
-      });
-      return;
-    }
-    // Ensure every field golfer has a DB row — the tournament may have been
-    // created weeks ago against a stale/wrong field, so matching only against
-    // already-inserted golfers silently drops newcomers (how Justin Rose went
-    // missing). Chunked upsert keyed on espn_id.
-    const CHUNK = 100;
-    for (let i = 0; i < field.length; i += CHUNK) {
-      const chunk = field.slice(i, i + CHUNK).map((f) => ({ espnId: f.espnId, name: f.name }));
-      if (chunk.length) {
-        await db.insert(golfersTable).values(chunk).onConflictDoUpdate({
-          target: golfersTable.espnId,
-          set: { name: sql`excluded.name` },
-        });
+
+    // ESPN's field feed churns around publication time (variants flap between
+    // the full entry list and 0 players, and origin fetches time out). When it
+    // won't answer, fall back to matching odds against every golfer already in
+    // the DB — field golfers get upserted on any successful fetch, so the
+    // priced players are almost always already known. Odds are event-specific,
+    // so this can't pull in another tournament's players.
+    const dbFallback = field.length === 0;
+
+    if (!dbFallback) {
+      // Ensure every field golfer has a DB row — the tournament may have been
+      // created weeks ago against a stale/wrong field, so matching only against
+      // already-inserted golfers silently drops newcomers (how Justin Rose went
+      // missing). Chunked upsert keyed on espn_id.
+      const CHUNK = 100;
+      for (let i = 0; i < field.length; i += CHUNK) {
+        const chunk = field.slice(i, i + CHUNK).map((f) => ({ espnId: f.espnId, name: f.name }));
+        if (chunk.length) {
+          await db.insert(golfersTable).values(chunk).onConflictDoUpdate({
+            target: golfersTable.espnId,
+            set: { name: sql`excluded.name` },
+          });
+        }
       }
     }
 
     // A "field" much larger than a real major field (~156) is ESPN's full
     // entry/qualifying list, published before the final field. Tier only the
     // priced players in that case so T4/T5 dropdowns don't fill with
-    // non-qualifiers; the admin rebuilds once the real field posts.
-    const isEntryList = field.length > 250;
+    // non-qualifiers; the admin rebuilds once the real field posts. The DB
+    // fallback behaves the same way (matched players only).
+    const isEntryList = field.length > 250 || dbFallback;
 
     const espnIds = field.map((f) => f.espnId);
-    const dbGolfers = espnIds.length
-      ? await db.select({ id: golfersTable.id, name: golfersTable.name }).from(golfersTable).where(inArray(golfersTable.espnId, espnIds))
-      : [];
+    const dbGolfers = dbFallback
+      ? await db.select({ id: golfersTable.id, name: golfersTable.name }).from(golfersTable)
+      : await db.select({ id: golfersTable.id, name: golfersTable.name }).from(golfersTable).where(inArray(golfersTable.espnId, espnIds));
     const byNorm = new Map<string, { id: string; name: string }>();
     for (const g of dbGolfers) byNorm.set(normalizeName(g.name), g);
 
@@ -884,7 +890,9 @@ router.post("/admin/tiers/suggest", async (req, res) => {
       // the pick dropdowns) only contain plausible players.
       unmatched: isEntryList ? [] : unmatched,
       suggestedBreaks,
-      note: isEntryList
+      note: dbFallback
+        ? `ESPN's field feed isn't answering right now, so tiers were built from the ${matched.length} priced players already known to the app. Rebuild once the final field posts (Monday of tournament week).`
+        : isEntryList
         ? `ESPN currently lists the full entry list (${field.length} players) — tiers were built from the ${matched.length} priced players only. Rebuild once the final field posts (Monday of tournament week) for full coverage.`
         : null,
     });
