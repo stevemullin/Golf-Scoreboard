@@ -91,29 +91,39 @@ export async function fetchESPNHistoricalEvent(year: number, nameQuery: string, 
 }
 
 export async function fetchESPNField(espnEventId: string, year?: number): Promise<ESPNGolfer[]> {
+  // STRICT: only ever use the requested event. ESPN returns the *current*
+  // week's events when the id isn't in its window — using events[0] here once
+  // built tiers for The Open against the Scottish Open's field.
+  let event: any = null;
+
+  // 1) Current-window lookup (fast, small payload).
   try {
-    const url = `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?event=${espnEventId}`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (!response.ok) return [];
+    const response = await fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?event=${espnEventId}`,
+      { signal: AbortSignal.timeout(15000) },
+    );
+    if (response.ok) {
+      const data = await response.json() as any;
+      event = data.events?.find((e: { id: string }) => e.id === espnEventId) ?? null;
+    }
+  } catch (err) {
+    logger.warn({ err, espnEventId }, "Field: current-window fetch failed; trying season feed");
+  }
 
-    const data = await response.json() as any;
-
-    // STRICT: only ever use the requested event. ESPN returns the *current*
-    // week's events when the id isn't in its window — using events[0] here once
-    // built tiers for The Open against the Scottish Open's field.
-    let event = data.events?.find((e: { id: string }) => e.id === espnEventId);
-    if (!event) {
-      // Not in the current window (future or past event) — look it up by id in
-      // the season feed instead. Its field may legitimately be empty until
-      // ESPN publishes entrants (usually the Monday of tournament week).
-      // ESPN's CDN serves inconsistent variants while a field is being
-      // published (0 vs full entry list, request to request), so cache-bust
-      // and retry a couple of times before accepting an empty field.
-      const y = year ?? new Date().getFullYear();
-      for (let attempt = 0; attempt < 3; attempt++) {
+  // 2) Season-feed fallback by id. ESPN's CDN serves inconsistent variants
+  // while a field is being published (0 vs full entry list per request), and
+  // the season payload is big enough that origin fetches can time out — so:
+  // first attempt rides the CDN cache (fast), later attempts cache-bust, and
+  // every attempt survives its own failure (a timeout must NOT abort the loop;
+  // that bug turned one slow origin response into a false "no field yet").
+  if (!event) {
+    const y = year ?? new Date().getFullYear();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const cb = attempt === 0 ? "" : `&cb=${Date.now()}-${attempt}`;
         const seasonRes = await fetch(
-          `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${y}&cb=${Date.now()}-${attempt}`,
-          { signal: AbortSignal.timeout(20000) },
+          `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${y}${cb}`,
+          { signal: AbortSignal.timeout(25000) },
         );
         if (seasonRes.ok) {
           const season = await seasonRes.json() as any;
@@ -124,30 +134,29 @@ export async function fetchESPNField(espnEventId: string, year?: number): Promis
             if (n > 0) break; // got a populated variant
           }
         }
-        await new Promise((r) => setTimeout(r, 500));
+      } catch (err) {
+        logger.warn({ err, espnEventId, attempt }, "Field: season-feed attempt failed");
       }
+      await new Promise((r) => setTimeout(r, 500));
     }
+  }
 
-    if (!event) {
-      logger.warn({ espnEventId, year }, "Field: event not found in window or season feed");
-      return [];
-    }
-    const competition = event.competitions?.[0];
-    if (!competition) return [];
-
-    const golfers: ESPNGolfer[] = [];
-    for (const competitor of (competition.competitors || [])) {
-      golfers.push({
-        espnId: competitor.id,
-        name: competitor.athlete?.displayName || competitor.athlete?.fullName || "Unknown",
-      });
-    }
-
-    return golfers;
-  } catch (err) {
-    logger.error({ err }, "Failed to fetch ESPN field");
+  if (!event) {
+    logger.warn({ espnEventId, year }, "Field: event not found in window or season feed");
     return [];
   }
+  const competition = event.competitions?.[0];
+  if (!competition) return [];
+
+  const golfers: ESPNGolfer[] = [];
+  for (const competitor of (competition.competitors || [])) {
+    golfers.push({
+      espnId: competitor.id,
+      name: competitor.athlete?.displayName || competitor.athlete?.fullName || "Unknown",
+    });
+  }
+
+  return golfers;
 }
 
 export interface ESPNEventListItem {
