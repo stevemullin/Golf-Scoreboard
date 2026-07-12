@@ -796,7 +796,7 @@ router.post("/admin/tiers/suggest", async (req, res) => {
     const field = await fetchESPNField(tournament.espnEventId, tournament.year);
     if (field.length === 0) {
       res.status(400).json({
-        error: "ESPN hasn't published this event's field yet — it usually appears the Monday of tournament week. Odds are ready; rebuild tiers once the field is up.",
+        error: "ESPN hasn't published this event's field yet (or its cache is lagging) — it usually appears the Monday of tournament week. Wait a minute and press Build from odds again.",
       });
       return;
     }
