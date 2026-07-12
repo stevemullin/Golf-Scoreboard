@@ -106,14 +106,25 @@ export async function fetchESPNField(espnEventId: string, year?: number): Promis
       // Not in the current window (future or past event) — look it up by id in
       // the season feed instead. Its field may legitimately be empty until
       // ESPN publishes entrants (usually the Monday of tournament week).
+      // ESPN's CDN serves inconsistent variants while a field is being
+      // published (0 vs full entry list, request to request), so cache-bust
+      // and retry a couple of times before accepting an empty field.
       const y = year ?? new Date().getFullYear();
-      const seasonRes = await fetch(
-        `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${y}`,
-        { signal: AbortSignal.timeout(20000) },
-      );
-      if (seasonRes.ok) {
-        const season = await seasonRes.json() as any;
-        event = season.events?.find((e: { id: string }) => e.id === espnEventId);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const seasonRes = await fetch(
+          `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${y}&cb=${Date.now()}-${attempt}`,
+          { signal: AbortSignal.timeout(20000) },
+        );
+        if (seasonRes.ok) {
+          const season = await seasonRes.json() as any;
+          const found = season.events?.find((e: { id: string }) => e.id === espnEventId);
+          if (found) {
+            event = found;
+            const n = found.competitions?.[0]?.competitors?.length ?? 0;
+            if (n > 0) break; // got a populated variant
+          }
+        }
+        await new Promise((r) => setTimeout(r, 500));
       }
     }
 
