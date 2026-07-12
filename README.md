@@ -185,10 +185,12 @@ A failed build leaves the current version live (zero downtime). **CI**
 an UptimeRobot monitor pings `/api/healthz/db` every 5 minutes (keeps both warm —
 turn it on around tournament time).
 
-**Automated reminders:** point a free scheduler (e.g. [cron-job.org](https://cron-job.org))
-at `POST /api/cron/reminders` once a day during pick week, sending header
-`X-Cron-Secret: <CRON_SECRET>`. It emails everyone who hasn't submitted yet. (The
-admin **Nudge now** button does the same on demand.)
+**Automated reminders:** `.github/workflows/reminders.yml` runs daily (14:00 UTC)
+and POSTs `/api/cron/reminders` with the `CRON_SECRET` repo secret. The endpoint
+self-gates — it only emails non-submitters while picks are open (tiers built,
+deadline set and future), so the schedule is harmless year-round. (The admin
+**Nudge now** button does the same on demand.) GitHub pauses schedules after
+~60 days of repo inactivity; a one-click re-enable or any push resumes it.
 
 ## Local development
 

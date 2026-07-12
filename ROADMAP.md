@@ -33,7 +33,7 @@ is the Ops checklist below (chiefly the live dry-run at The Open).
 ## ⚙️ Ops / setup (not code — your action)
 
 - [x] Set `BREVO_API_KEY` + `EMAIL_FROM` in Render to enable reminder emails.
-- [ ] For automated daily nudges: add `CRON_SECRET` in Render + a free [cron-job.org](https://cron-job.org) job hitting `POST /api/cron/reminders` (header `X-Cron-Secret`).
+- [x] Automated daily nudges — GitHub Actions workflow (`reminders.yml`, daily 14:00 UTC) + `CRON_SECRET` set in Render and as a repo secret (2026-07-11).
 - [ ] Lengthen `ADMIN_PASSWORD` in Render (it was short).
 - [ ] Turn on the UptimeRobot keep-alive (`/api/healthz/db`, every 5 min) around tournament time.
 - [ ] **Live dry-run for the 2026 majors** — point a tournament at the real ESPN event id and verify tiers → picks → masking → reveal → scoring end-to-end on a live event (so far tested against finished events).

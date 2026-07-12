@@ -1,0 +1,28 @@
+name: Daily pick reminders
+
+# Emails every pool member who hasn't submitted picks their personal link.
+# The endpoint self-gates (only sends while an event has tiers + an open,
+# future pick deadline), so running daily year-round is harmless — outside
+# pick weeks it replies {ok:false, reason:...} and sends nothing.
+#
+# NOTE: GitHub disables scheduled workflows after ~60 days without repo
+# activity and emails the owner — one click re-enables it. Any push also
+# re-enables.
+
+on:
+  schedule:
+    - cron: "0 14 * * *" # daily 14:00 UTC = 10am EDT / 9am EST
+  workflow_dispatch: {}
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send reminders to non-submitters
+        run: |
+          RESP=$(curl -sS -X POST "https://golf-scoreboard-hk3w.onrender.com/api/cron/reminders" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --retry 2 --retry-all-errors --max-time 150)
+          echo "Response: $RESP"
+          echo "$RESP" | grep -q '"error"' && exit 1 || true
