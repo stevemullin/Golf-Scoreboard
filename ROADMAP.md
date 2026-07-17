@@ -35,5 +35,5 @@ is the Ops checklist below (chiefly the live dry-run at The Open).
 - [x] Set `BREVO_API_KEY` + `EMAIL_FROM` in Render to enable reminder emails.
 - [x] Automated daily nudges — GitHub Actions workflow (`reminders.yml`, daily 14:00 UTC) + `CRON_SECRET` set in Render and as a repo secret (2026-07-11).
 - [ ] Lengthen `ADMIN_PASSWORD` in Render (it was short).
-- [ ] Turn on the UptimeRobot keep-alive (`/api/healthz/db`, every 5 min) around tournament time.
+- [ ] Turn on the UptimeRobot keep-alive (**`/api/healthz`, NOT `/healthz/db`** — the DB pinger burns Neon's monthly compute; see README) around tournament time.
 - [ ] **Live dry-run for the 2026 majors** — point a tournament at the real ESPN event id and verify tiers → picks → masking → reveal → scoring end-to-end on a live event (so far tested against finished events).

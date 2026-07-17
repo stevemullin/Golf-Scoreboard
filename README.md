@@ -181,9 +181,13 @@ pnpm 10 install (|| true to survive the cosmetic esbuild build-script gate)
 A failed build leaves the current version live (zero downtime). **CI**
 (`.github/workflows/ci.yml`) runs typecheck + build on every push/PR.
 
-**Keep-alive:** Render's free tier sleeps after 15 min idle and Neon suspends, so
-an UptimeRobot monitor pings `/api/healthz/db` every 5 minutes (keeps both warm —
-turn it on around tournament time).
+**Keep-alive:** Render's free tier sleeps after 15 min idle. Point the pinger at
+`/api/healthz` (NOT `/healthz/db`) — it keeps Render warm without touching the
+database. Neon should be left to auto-suspend: its free plan meters *compute
+hours*, and a 5-minute DB pinger keeps it awake 24/7 (~180 CU-hours/month — the
+whole allowance). Neon cold-resumes in ~1s on the first real query, which is
+imperceptible next to Render's own wake-up. `/api/healthz/db` remains for manual
+diagnosis only.
 
 **Automated reminders:** `.github/workflows/reminders.yml` runs daily (14:00 UTC)
 and POSTs `/api/cron/reminders` with the `CRON_SECRET` repo secret. The endpoint
