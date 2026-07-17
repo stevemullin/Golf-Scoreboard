@@ -570,13 +570,19 @@ function HoleScorecard({ roundHoles }: { roundHoles: (string | null)[] }) {
   return (
     <div className="space-y-1">
       {rounds.map((r) => (
-        <div key={r.round} className="flex items-center gap-1">
-          <span className="text-[10px] font-bold text-muted-foreground w-5 shrink-0">R{r.round}</span>
-          <div className="flex gap-0.5 flex-wrap">
-            {r.holes.map((h, hi) => (
-              <span key={hi} title={`Hole ${hi + 1}`} className={`inline-flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded ${holeColor(h.p)}`}>
-                {h.s ?? "·"}
-              </span>
+        <div key={r.round} className="flex items-start gap-1">
+          <span className="text-[10px] font-bold text-muted-foreground w-5 shrink-0 leading-5">R{r.round}</span>
+          {/* Holes grouped as front/back nine: each nine never breaks mid-row, so
+              narrow screens wrap cleanly at hole 9 instead of mid-scorecard. */}
+          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+            {[r.holes.slice(0, 9), r.holes.slice(9, 18)].filter((nine) => nine.length > 0).map((nine, ni) => (
+              <div key={ni} className="flex gap-0.5 flex-nowrap">
+                {nine.map((h, hi) => (
+                  <span key={hi} title={`Hole ${ni * 9 + hi + 1}`} className={`inline-flex items-center justify-center w-5 h-5 text-[10px] font-mono rounded ${holeColor(h.p)}`}>
+                    {h.s ?? "·"}
+                  </span>
+                ))}
+              </div>
             ))}
           </div>
         </div>
