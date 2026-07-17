@@ -462,13 +462,13 @@ export default function Home() {
                             <Table>
                               <TableHeader className="bg-transparent border-b border-border/50">
                                 <TableRow className="border-none hover:bg-transparent">
-                                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground min-w-[140px]">Golfer</TableHead>
-                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">Total</TableHead>
-                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">Thru</TableHead>
-                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">R1</TableHead>
-                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">R2</TableHead>
-                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">R3</TableHead>
-                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground">R4</TableHead>
+                                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground px-2 sm:px-4 min-w-0 sm:min-w-[140px]">Golfer</TableHead>
+                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground px-1.5 sm:px-4">Total</TableHead>
+                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground px-1.5 sm:px-4">Thru</TableHead>
+                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground px-1 sm:px-4">R1</TableHead>
+                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground px-1 sm:px-4">R2</TableHead>
+                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground px-1 sm:px-4">R3</TableHead>
+                                  <TableHead className="text-right text-xs uppercase tracking-wider text-muted-foreground px-1 sm:px-4">R4</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -478,38 +478,38 @@ export default function Home() {
                                   return (
                                     <React.Fragment key={golfer.golferId}>
                                     <TableRow className={`border-border/20 hover:bg-white/5 ${isDropped ? 'opacity-40' : ''}`}>
-                                      <TableCell className="font-semibold">
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          {golfer.golferFlag && <img src={golfer.golferFlag} alt="" className="w-4 h-3 rounded-[2px] object-cover shrink-0" loading="lazy" />}
+                                      <TableCell className="font-semibold px-2 sm:px-4 max-w-[34vw] sm:max-w-none">
+                                        <div className="flex items-center gap-1 sm:gap-1.5 flex-nowrap min-w-0">
+                                          {golfer.golferFlag && <img src={golfer.golferFlag} alt="" className="w-3.5 h-2.5 sm:w-4 sm:h-3 rounded-[2px] object-cover shrink-0" loading="lazy" />}
                                           {golfer.golferEspnId ? (
                                             <a
                                               href={`https://www.espn.com/golf/player/_/id/${golfer.golferEspnId}`}
                                               target="_blank"
                                               rel="noreferrer"
                                               onClick={(e) => e.stopPropagation()}
-                                              className="hover:text-primary hover:underline underline-offset-2"
+                                              className="hover:text-primary hover:underline underline-offset-2 truncate min-w-0"
                                             >
                                               {golfer.golferName}
                                             </a>
                                           ) : (
-                                            <span>{golfer.golferName}</span>
+                                            <span className="truncate min-w-0">{golfer.golferName}</span>
                                           )}
-                                          {golfer.isCut && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">CUT</Badge>}
-                                          {golfer.isWd && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">WD</Badge>}
-                                          {golfer.isDq && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">DQ</Badge>}
+                                          {golfer.isCut && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4 shrink-0">CUT</Badge>}
+                                          {golfer.isWd && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4 shrink-0">WD</Badge>}
+                                          {golfer.isDq && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4 shrink-0">DQ</Badge>}
                                           {projectedCut != null && golfer.totalToPar != null && !golfer.isCut && !golfer.isWd && !golfer.isDq && (golfer.totalToPar - projectedCut) > -2 && (
-                                            <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 ${(golfer.totalToPar - projectedCut) > 2 ? "border-red-500/60 text-red-500" : "border-amber-500/60 text-amber-500"}`}>RISK</Badge>
+                                            <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 ${(golfer.totalToPar - projectedCut) > 2 ? "border-red-500/60 text-red-500" : "border-amber-500/60 text-amber-500"} shrink-0`}>RISK</Badge>
                                           )}
                                         </div>
                                       </TableCell>
-                                      <TableCell className={`text-right font-mono font-bold ${golfer.totalToPar !== null && golfer.totalToPar < 0 ? 'text-primary' : ''}`}>
+                                      <TableCell className={`text-right font-mono font-bold px-1.5 sm:px-4 whitespace-nowrap ${golfer.totalToPar !== null && golfer.totalToPar < 0 ? 'text-primary' : ''}`}>
                                         {formatScore(golfer.totalToPar)}
                                       </TableCell>
-                                      <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                                      <TableCell className="text-right font-mono text-[11px] sm:text-sm text-muted-foreground px-1.5 sm:px-4 whitespace-nowrap">
                                         {golfer.isCut || golfer.isWd || golfer.isDq ? '-' : golfer.holesCompleted === 18 ? 'F' : golfer.holesCompleted > 0 ? golfer.holesCompleted : golfer.teeTime ? formatTeeTime(golfer.teeTime) : '-'}
                                       </TableCell>
                                       {golfer.roundScores.map((score, i) => (
-                                        <TableCell key={i} className={`text-right font-mono text-sm ${score !== null && score < 0 ? 'text-primary' : ''} ${golfer.roundIsPenalty[i] ? 'italic text-destructive' : ''}`}>
+                                        <TableCell key={i} className={`text-right font-mono text-[11px] sm:text-sm px-1 sm:px-4 ${score !== null && score < 0 ? 'text-primary' : ''} ${golfer.roundIsPenalty[i] ? 'italic text-destructive' : ''}`}>
                                           {formatScore(score)}
                                         </TableCell>
                                       ))}
