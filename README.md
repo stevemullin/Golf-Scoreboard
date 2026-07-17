@@ -26,10 +26,10 @@ time. Built as a small pnpm monorepo and hosted for free.
 |---|---|
 | Frontend | React 19 + Vite, wouter, TanStack Query, Radix/shadcn UI, Tailwind v4, Recharts |
 | API | Express 5, Pino logging |
-| Database | Neon Postgres via Drizzle ORM (`drizzle-orm/node-postgres`) |
+| Database | Supabase Postgres (free tier, session pooler) via Drizzle ORM (`drizzle-orm/node-postgres`) |
 | Scores | ESPN's public golf API (`site.api.espn.com/.../golf/pga/scoreboard`) |
 | Tooling | pnpm 10 workspaces, TypeScript, Node 24 |
-| Hosting | Render (web service) + Neon (DB) — both free tier |
+| Hosting | Render (web service) + Supabase (DB) — both free tier |
 
 ## Repository layout
 
@@ -155,7 +155,7 @@ All `/api/admin/*` routes are rate-limited (30/min per IP) and gated by `ADMIN_P
 
 | Var | Purpose |
 |---|---|
-| `DATABASE_URL` | Neon **direct** connection string. Must **not** include `channel_binding=require` (node-postgres hangs on it). |
+| `DATABASE_URL` | Supabase **Session pooler** URI with `?sslmode=no-verify` (Supabase certs are self-CA'd; `require` now verify-fulls and fails). Migrated from Neon 2026-07 after its 100 CU-hr/month compute cap ran out. |
 | `ADMIN_PASSWORD` | Required — admin actions are blocked without it. Use a long value. |
 | `NODE_ENV` | `production` |
 | `NODE_VERSION` | `24` |
@@ -214,7 +214,7 @@ pnpm typecheck          # works everywhere (the CI/deploy gate)
   on an interactive prompt in CI (it wants to add a unique constraint to a
   populated table) and silently skips column adds — that once dropped a column and
   500'd the scoreboard.
-- **Neon URL:** use the direct (non-pooled) string **without** `channel_binding`.
+- **DB URL (Supabase):** Session-pooler URI + `sslmode=no-verify`. (Historical: on Neon, `channel_binding=require` hung node-postgres; Neon was dropped when its 100 CU-hr free compute cap exhausted mid-season — Supabase free has no compute metering.)
 - **ESPN** is an unofficial API and can change/break; the `manual_scores` table is
   the fallback.
 
