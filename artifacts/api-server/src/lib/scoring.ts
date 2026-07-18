@@ -249,6 +249,9 @@ export async function getProjectedCut(tournamentId: string): Promise<number | nu
     .where(eq(tournamentsTable.id, tournamentId))
     .then((r) => r[0]);
   if (!tournament || !tournament.cutSize) return null;
+  // The projected line is an R2-window concept. Once R3 exists the real cut is
+  // made — return null so the RISK badges retire (they key off this value).
+  if ((tournament.currentRound || 0) >= 3) return null;
   const cutSize = tournament.cutSize;
 
   const rows = await db

@@ -64,25 +64,48 @@ export function parseEvent(event: any): { golfers: ESPNGolferData[]; eventStatus
     statusDetail: event.status?.type?.shortDetail || event.status?.type?.description || null,
   };
 
+  // ── Cut detection ──────────────────────────────────────────────────────────
+  // ESPN gives NO explicit cut marker, and on live weekend mornings a cut
+  // player and a made-the-cut-but-not-yet-teed player are byte-identical
+  // (period-3 linescore, displayValue "-", zero holes, empty stats). The one
+  // reliable inference: R3 tees go worst-score-first, so the CUT LINE is the
+  // worst 36-hole total among players who have actual R3/R4 data — anyone with
+  // no weekend data whose 36-hole total is strictly ABOVE that line missed the
+  // cut (ties at the line make the cut in golf, hence strictly-above).
+  const dataInfo = (ls: any) => {
+    const holes = (ls.linescores || []).filter((h: any) => h.displayValue !== "-" && h.displayValue !== "").length;
+    const score = typeof ls.displayValue === "string" ? parseScoreValue(ls.displayValue) : null;
+    return { period: ls.period as number, score, hasData: score !== null || holes > 0 };
+  };
+  const perComp = (competition.competitors || []).map((competitor: any) => {
+    const infos = (competitor.linescores || []).map(dataInfo).filter((i: any) => i.period >= 1 && i.period <= 4);
+    const maxDataPeriod = infos.filter((i: any) => i.hasData).reduce((m: number, i: any) => Math.max(m, i.period), 0);
+    const r1 = infos.find((i: any) => i.period === 1)?.score ?? null;
+    const r2 = infos.find((i: any) => i.period === 2)?.score ?? null;
+    const r12Total = r1 !== null && r2 !== null ? r1 + r2 : null;
+    return { competitor, maxDataPeriod, r12Total };
+  });
+  let cutLine: number | null = null;
+  if (maxRound >= 3) {
+    const weekendTotals = perComp
+      .filter((c: any) => c.maxDataPeriod >= 3 && c.r12Total !== null)
+      .map((c: any) => c.r12Total as number);
+    cutLine = weekendTotals.length ? Math.max(...weekendTotals) : null;
+  }
+
   const golfers: ESPNGolferData[] = [];
 
-  for (const competitor of (competition.competitors || [])) {
+  for (const { competitor, maxDataPeriod, r12Total } of perComp) {
     const espnId = competitor.id;
     const name = competitor.athlete?.displayName || competitor.athlete?.fullName || "Unknown";
     const flag = competitor.athlete?.flag?.href ?? null;
     const scores: ESPNRoundScore[] = [];
 
-    // Determine cut/out status at the golfer level. Once the field reaches
-    // round 3+, ESPN stops advancing cut players, so their highest linescore
-    // period stays below the field's current round. A player who simply hasn't
-    // teed off in the current round still gets a linescore entry for it, so they
-    // are NOT flagged. (The old per-round "empty round > 2 = cut" rule wrongly
-    // flagged everyone who hadn't started round 3/4 yet.)
-    const golferPeriods = (competitor.linescores || [])
-      .map((l: { period: number }) => l.period)
-      .filter((p: number) => p >= 1 && p <= 4);
-    const golferMaxPeriod = golferPeriods.length ? Math.max(...golferPeriods) : 0;
-    const golferIsCut = maxRound >= 3 && golferMaxPeriod < maxRound;
+    const golferIsCut =
+      maxRound >= 3 &&
+      maxDataPeriod <= 2 &&
+      r12Total !== null &&
+      (cutLine === null || r12Total > cutLine);
 
     for (const linescore of (competitor.linescores || [])) {
       const roundNumber = linescore.period;
