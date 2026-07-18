@@ -73,6 +73,35 @@ test("cut golfer: missing R3/R4 rows are backfilled as isCut", () => {
   assert.equal(carl.scores.find((s) => s.roundNumber === 1)!.isCut, false);
 });
 
+test("live weekend: cut inferred from the line; not-yet-teed players spared", () => {
+  // R3 in progress. A (r12 +1) has R3 data => line = +1. B (r12 -5) hasn't
+  // teed off => NOT cut. C (r12 +4 > +1) with the same empty R3 shape => CUT.
+  const p = (period: number, dv: string, hs: ReturnType<typeof hole>[]) =>
+    ({ period, displayValue: dv, linescores: hs });
+  const live = {
+    id: "402", name: "Live Major",
+    status: { type: { state: "in", completed: false, description: "In Progress" } },
+    competitions: [{
+      competitors: [
+        { id: "A", athlete: { displayName: "On Course Al" },
+          linescores: [p(1, "+2", [hole("4", "E")]), p(2, "-1", [hole("3", "-1")]), p(3, "-2", [hole("4", "E")])] },
+        { id: "B", athlete: { displayName: "Late Tee Bob" },
+          linescores: [p(1, "-3", [hole("4", "E")]), p(2, "-2", [hole("4", "E")]), p(3, "-", [])] },
+        { id: "C", athlete: { displayName: "Cut Chris" },
+          linescores: [p(1, "+2", [hole("5", "+1")]), p(2, "+2", [hole("4", "E")]), p(3, "-", [])] },
+      ],
+    }],
+  };
+  const parsed = parseEvent(live)!;
+  assert.equal(parsed.eventStatus.currentRound, 3);
+  const by = (id: string) => parsed.golfers.find((g) => g.espnId === id)!;
+  assert.ok(by("A").scores.every((s) => !s.isCut), "player with R3 data is never cut");
+  assert.ok(by("B").scores.every((s) => !s.isCut), "below the line without R3 data = just not teed off yet");
+  const chrisR3 = by("C").scores.find((s) => s.roundNumber === 3)!;
+  assert.equal(chrisR3.isCut, true, "above the line without R3 data = cut");
+  assert.equal(chrisR3.scoreToPar, null);
+});
+
 test("survivor is not flagged cut", () => {
   const parsed = parseEvent(fixture)!;
   const sam = parsed.golfers.find((g) => g.espnId === "g1")!;
